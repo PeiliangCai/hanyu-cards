@@ -28,6 +28,12 @@ cypress/screenshots
 # Ignore local files
 .env
 *.local
+/apk-key/
+/android/app/release/
+*.jks
+*.keystore
+*.p12
+*.pfx
 
 # Configs
 firebase.config.json

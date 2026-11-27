@@ -18,6 +18,10 @@ const reveal = ref(false)
 const cursor = ref(0)
 const savingReview = ref(false)
 
+const queuePosition = computed(() => {
+    return studyQueue.value.length === 0 ? 0 : cursor.value + 1
+})
+
 const studyQueue = computed(() => {
     const words = content.filteredWords
     const due = words.filter((word) => isDue(progress.records[word.id]))
@@ -27,17 +31,25 @@ const studyQueue = computed(() => {
     return [...reviewing, ...fresh].slice(0, 80)
 })
 
-const activeWord = computed<HskWord | undefined>(() => studyQueue.value[cursor.value] ?? studyQueue.value[0])
+const activeWord = computed<HskWord | undefined>(
+    () => studyQueue.value[cursor.value] ?? studyQueue.value[0],
+)
 
-watch(activeWord, (word) => {
-    if (word)
-        content.setActiveWord(word.id)
-}, { immediate: true })
+watch(
+    activeWord,
+    (word) => {
+        if (word) content.setActiveWord(word.id)
+    },
+    { immediate: true },
+)
 
-watch(() => content.selectedLevel, () => {
-    cursor.value = 0
-    reveal.value = false
-})
+watch(
+    () => content.selectedLevel,
+    () => {
+        cursor.value = 0
+        reveal.value = false
+    },
+)
 
 async function review(grade: ReviewGrade) {
     if (!activeWord.value || savingReview.value)
@@ -65,11 +77,13 @@ async function review(grade: ReviewGrade) {
             </div>
             <select
                 v-model="content.selectedLevel"
-                aria-label="Choose HSK level">
+                aria-label="Choose HSK level"
+            >
                 <option
                     v-for="option in levelOptions"
                     :key="option.value"
-                    :value="option.value">
+                    :value="option.value"
+                >
                     {{ option.label }}
                 </option>
             </select>
@@ -77,11 +91,23 @@ async function review(grade: ReviewGrade) {
 
         <div
             class="study-visual"
-            aria-hidden="true">
+            aria-hidden="true"
+        >
             <span>汉</span>
             <span>语</span>
             <span>学</span>
             <span>习</span>
+        </div>
+
+        <div
+            v-if="activeWord"
+            class="study-progress"
+            aria-label="Study queue progress"
+        >
+            <span>{{ queuePosition }} / {{ studyQueue.length }} cards</span>
+            <div class="progress-track">
+                <i :style="{ width: `${studyQueue.length ? (queuePosition / studyQueue.length) * 100 : 0}%` }"></i>
+            </div>
         </div>
 
         <WordCard
@@ -92,12 +118,14 @@ async function review(grade: ReviewGrade) {
             :progress="progress.records[activeWord.id]"
             :reveal="reveal"
             :tts-enabled="settings.ttsEnabled"
-            :show-traditional="settings.showTraditional">
+            :show-traditional="settings.showTraditional"
+        >
         </WordCard>
 
         <div
             v-else
-            class="empty-state">
+            class="empty-state"
+        >
             <h3>No cards found</h3>
             <p>Try another HSK level or clear your search.</p>
         </div>

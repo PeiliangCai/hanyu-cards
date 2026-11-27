@@ -23,3 +23,8 @@ cypress/videos
 cypress/screenshots
 cypress/snapshots
 .DS_Store
+apk-key
+*.jks
+*.keystore
+*.p12
+*.pfx
