@@ -20,6 +20,10 @@
     --shadow-sm: 0 8px 24px rgba(25, 69, 66, 0.08);
     --shadow-md: 0 20px 52px rgba(25, 69, 66, 0.13);
     --shadow-lg: 0 32px 80px rgba(25, 69, 66, 0.18);
+    --page-gutter: 22px;
+    --sticky-header-offset: 80px;
+    --dock-clearance: 104px;
+    --viewport-height: 100vh;
     color: var(--ink);
     background: var(--canvas);
     font-family: "Avenir Next", Avenir, Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
@@ -34,12 +38,16 @@
 
 html {
     scroll-behavior: smooth;
+    scroll-padding-top: var(--sticky-header-offset);
+    scroll-padding-top: calc(var(--sticky-header-offset) + env(safe-area-inset-top, 0px));
+    scroll-padding-bottom: var(--dock-clearance);
+    scroll-padding-bottom: calc(var(--dock-clearance) + env(safe-area-inset-bottom, 0px));
 }
 
 body {
     margin: 0;
-    min-width: 320px;
-    min-height: 100vh;
+    overflow-wrap: break-word;
+    overflow-wrap: anywhere;
     background:
         linear-gradient(rgba(255, 253, 248, 0.82), rgba(244, 241, 233, 0.94)),
         radial-gradient(circle at 16% 5%, rgba(40, 166, 155, 0.2), transparent 24rem),
@@ -79,8 +87,10 @@ a {
     color: inherit;
 }
 
-#app {
-    min-height: 100vh;
+@supports (height: 100dvh) {
+    :root {
+        --viewport-height: 100dvh;
+    }
 }
 
 .sr-only {
@@ -104,12 +114,13 @@ a {
 }
 
 .app-shell {
-    --sticky-header-offset: calc(80px + env(safe-area-inset-top));
-
     position: relative;
-    min-height: 100vh;
-    padding: max(18px, env(safe-area-inset-top)) 22px calc(104px + env(safe-area-inset-bottom));
-    overflow: clip;
+    min-height: var(--viewport-height);
+    padding: 18px var(--page-gutter) var(--dock-clearance);
+    padding-top: max(18px, env(safe-area-inset-top, 0px));
+    padding-right: max(var(--page-gutter), env(safe-area-inset-right, 0px));
+    padding-bottom: calc(var(--dock-clearance) + env(safe-area-inset-bottom, 0px));
+    padding-left: max(var(--page-gutter), env(safe-area-inset-left, 0px));
 }
 
 .app-atmosphere {
@@ -150,6 +161,7 @@ a {
 
 .topbar {
     position: sticky;
+    top: 8px;
     top: max(8px, env(safe-area-inset-top));
     z-index: 25;
     display: grid;
@@ -265,6 +277,7 @@ a {
 
 .topbar__meter small {
     display: flex;
+    flex-wrap: wrap;
     justify-content: space-between;
     gap: 5px;
 }
@@ -296,6 +309,7 @@ a {
 .topbar__settings {
     display: grid;
     width: 48px;
+    min-height: 44px;
     place-items: center;
     color: var(--ink);
 }
@@ -314,6 +328,7 @@ a {
 
 .screen {
     display: grid;
+    grid-template-columns: minmax(0, 1fr);
     gap: 20px;
     animation: screen-enter 420ms ease both;
 }
@@ -359,6 +374,7 @@ a {
 }
 
 select {
+    min-width: 0;
     max-width: 190px;
     padding: 0 38px 0 13px;
 }
@@ -371,10 +387,13 @@ select {
     align-items: center;
     justify-content: center;
     gap: 8px;
+    min-width: 0;
     min-height: 48px;
+    max-width: 100%;
     border-radius: 14px;
     padding: 0 20px;
     font-weight: 900;
+    text-align: center;
     text-decoration: none;
     transition: box-shadow 180ms ease, transform 180ms ease, background 180ms ease;
 }
@@ -407,6 +426,7 @@ select {
 .primary-action svg,
 .secondary-action svg,
 .text-action svg {
+    flex: 0 0 auto;
     width: 20px;
     height: 20px;
 }
@@ -540,6 +560,10 @@ select {
     flex-wrap: wrap;
     gap: 8px;
     margin-top: 24px;
+}
+
+.study-hero__actions .study-hero__start {
+    display: none;
 }
 
 .study-plan-ring {
@@ -727,6 +751,7 @@ select {
 }
 
 .deck-status > .deck-status__scope {
+    flex-wrap: wrap;
     justify-content: space-between;
     gap: 16px;
     background: rgba(255, 253, 248, 0.88);
@@ -739,7 +764,6 @@ select {
 }
 
 .deck-status__scope a {
-    flex: 0 0 auto;
     color: var(--jade-700);
     font-size: 0.7rem;
     font-weight: 900;
@@ -995,9 +1019,11 @@ select {
 
 .word-card__audio {
     display: inline-flex;
+    flex: 0 0 auto;
     align-items: center;
+    justify-content: center;
     gap: 7px;
-    min-height: 42px;
+    min-height: 44px;
     border-radius: 999px;
     padding: 0 14px;
     background: var(--ink);
@@ -1029,6 +1055,7 @@ select {
     gap: 4px;
     min-height: 330px;
     padding: 24px;
+    text-align: center;
 }
 
 .character-grid {
@@ -1048,10 +1075,12 @@ select {
 .quiz-panel__hanzi {
     position: relative;
     z-index: 1;
+    max-width: 100%;
     font-family: "Noto Serif SC", "Songti SC", "STSong", serif;
     font-size: clamp(5.2rem, 17vw, 9.5rem);
     font-weight: 800;
     line-height: 0.98;
+    text-align: center;
 }
 
 .word-card__pinyin,
@@ -1061,6 +1090,7 @@ select {
     color: var(--vermilion);
     font-size: clamp(1.25rem, 3vw, 1.8rem);
     font-weight: 900;
+    text-align: center;
 }
 
 .word-card__face > small,
@@ -1320,7 +1350,7 @@ select {
 
 .practice-toolbar {
     display: grid;
-    grid-template-columns: 1fr auto;
+    grid-template-columns: minmax(0, 1fr) auto;
     align-items: end;
     gap: 20px;
     border: 1px solid var(--line);
@@ -1414,6 +1444,7 @@ select {
     gap: 3px;
     min-height: 430px;
     padding: 24px;
+    text-align: center;
 }
 
 .quiz-panel__audio {
@@ -1510,6 +1541,10 @@ select {
     color: var(--leaf);
 }
 
+.quiz-options button span {
+    min-width: 0;
+}
+
 .quiz-options button.selected {
     border-color: var(--jade-700);
     box-shadow: inset 0 0 0 2px var(--jade-700);
@@ -1541,6 +1576,7 @@ select {
 }
 
 .quiz-feedback > svg {
+    flex: 0 0 auto;
     width: 26px;
 }
 
@@ -1655,6 +1691,7 @@ select {
 
 .mistake-focus > header {
     display: flex;
+    flex-wrap: wrap;
     align-items: center;
     justify-content: space-between;
     gap: 16px;
@@ -1735,6 +1772,7 @@ select {
 .word-list-panel,
 .progress-word-list-panel {
     display: grid;
+    grid-template-columns: minmax(0, 1fr);
     min-width: 0;
     gap: 12px;
 }
@@ -1760,6 +1798,7 @@ select {
 }
 
 .pagination-controls button {
+    min-height: 44px;
     border-radius: 10px;
     padding: 8px 12px;
     background: var(--jade-50);
@@ -1804,6 +1843,7 @@ select {
 
 .word-row__word {
     display: flex;
+    flex-wrap: wrap;
     align-items: baseline;
     gap: 10px;
 }
@@ -1828,6 +1868,7 @@ select {
 
 .word-row footer {
     display: flex;
+    flex-wrap: wrap;
     grid-column: 1 / -1;
     align-items: center;
     gap: 6px;
@@ -1836,8 +1877,9 @@ select {
 .word-row footer button,
 .dictionary-detail header button {
     display: grid;
-    width: 38px;
-    height: 38px;
+    flex: 0 0 auto;
+    width: 44px;
+    height: 44px;
     margin-left: auto;
     border-radius: 50%;
     place-items: center;
@@ -1860,7 +1902,9 @@ select {
 .dictionary-detail {
     position: sticky;
     top: var(--sticky-header-offset);
+    top: calc(var(--sticky-header-offset) + env(safe-area-inset-top, 0px));
     display: grid;
+    grid-template-columns: minmax(0, 1fr);
     gap: 14px;
     border-radius: 24px 24px 24px 8px;
     padding: 18px;
@@ -1888,8 +1932,10 @@ select {
 .dictionary-detail__character strong {
     position: relative;
     z-index: 1;
+    max-width: 100%;
     font-family: "Noto Serif SC", "Songti SC", serif;
     font-size: 6rem;
+    text-align: center;
 }
 
 .dictionary-detail > h3 {
@@ -2034,7 +2080,7 @@ select {
     min-width: 0;
 }
 
-.stats-grid span {
+.stats-grid article > div > span {
     display: block;
     font-size: clamp(1.45rem, 4vw, 2.3rem);
     font-weight: 900;
@@ -2095,15 +2141,16 @@ select {
 
 .weekly-chart {
     display: grid;
-    grid-template-columns: repeat(7, minmax(36px, 1fr));
-    gap: 10px;
-    height: 180px;
+    grid-template-columns: repeat(7, minmax(0, 1fr));
+    gap: 6px;
+    gap: clamp(3px, 1.4vw, 10px);
+    min-height: 180px;
     margin-top: 20px;
 }
 
 .weekly-chart > div {
     display: grid;
-    grid-template-rows: 20px 1fr 18px 16px;
+    grid-template-rows: auto minmax(60px, 1fr) auto auto;
     gap: 5px;
     min-width: 0;
     color: var(--muted);
@@ -2190,6 +2237,7 @@ select {
 
 .skill-performance-grid article > header {
     display: flex;
+    flex-wrap: wrap;
     justify-content: space-between;
     gap: 7px;
     font-size: 0.73rem;
@@ -2320,7 +2368,7 @@ select {
 
 .progress-word-list > a {
     display: grid;
-    grid-template-columns: 50px minmax(0, 1fr) auto;
+    grid-template-columns: fit-content(28%) minmax(0, 1fr) auto;
     align-items: center;
     gap: 10px;
     border: 1px solid var(--line);
@@ -2550,6 +2598,7 @@ select {
 .bottom-nav {
     position: fixed;
     right: 18px;
+    bottom: 13px;
     bottom: max(13px, env(safe-area-inset-bottom));
     left: 18px;
     z-index: 20;
@@ -2569,6 +2618,8 @@ select {
 
 .bottom-nav__item {
     display: grid;
+    min-width: 0;
+    min-height: 44px;
     align-content: center;
     justify-items: center;
     gap: 3px;
@@ -2576,8 +2627,13 @@ select {
     color: var(--muted);
     font-size: 0.68rem;
     font-weight: 900;
+    text-align: center;
     text-decoration: none;
     transition: color 160ms ease, background 160ms ease;
+}
+
+.bottom-nav__item:focus-visible {
+    outline-offset: -3px;
 }
 
 .bottom-nav__icon {
@@ -2624,7 +2680,7 @@ select {
 
     to {
         opacity: 1;
-        transform: translateY(0);
+        transform: none;
     }
 }
 
@@ -2653,7 +2709,7 @@ select {
 
 @media (max-width: 900px) {
     .topbar {
-        grid-template-columns: 1fr auto;
+        grid-template-columns: minmax(0, 1fr) auto;
     }
 
     .topbar__date {
@@ -2662,7 +2718,8 @@ select {
 
     .word-card,
     .quiz-panel {
-        grid-template-columns: 1fr;
+        grid-template-columns: minmax(0, 1fr);
+        grid-template-rows: auto;
     }
 
     .word-card__face,
@@ -2672,7 +2729,7 @@ select {
     }
 
     .word-card__review {
-        grid-template-columns: 1fr;
+        grid-template-columns: minmax(0, 1fr);
     }
 
     .dictionary-layout {
@@ -2692,45 +2749,110 @@ select {
     }
 
     .settings-layout {
-        grid-template-columns: 1fr;
+        grid-template-columns: minmax(0, 1fr);
     }
 }
 
-@media (max-width: 720px) {
+@media (max-width: 720px), (max-width: 950px) and (max-height: 520px) {
+    :root {
+        --page-gutter: 12px;
+        --sticky-header-offset: calc(60px + 1rem);
+        --dock-height: 68px;
+        --dock-gap: 8px;
+        --dock-clearance: calc(var(--dock-height) + var(--dock-gap) + 1.5rem);
+    }
+
     .app-shell {
-        padding-right: 12px;
-        padding-left: 12px;
+        padding-top: 12px;
+        padding-top: max(12px, env(safe-area-inset-top, 0px));
+    }
+
+    .topbar {
+        grid-template-columns: minmax(0, 1fr) auto;
+        gap: 8px;
+        margin-bottom: 14px;
+        padding: 5px 6px;
     }
 
     .brand__copy small,
+    .topbar__date,
     .topbar__streak {
         display: none;
+    }
+
+    .brand__mark {
+        width: 44px;
+        height: 44px;
+    }
+
+    .topbar__actions {
+        gap: 6px;
+    }
+
+    .topbar__meter {
+        min-width: 82px;
+        padding: 5px 8px;
+    }
+
+    .topbar__meter > div {
+        height: 4px;
+        margin-top: 4px;
+    }
+
+    .topbar__settings {
+        width: 44px;
+    }
+
+    .screen {
+        gap: 14px;
     }
 
     .study-hero,
     .practice-hero,
     .dictionary-hero,
     .progress-hero,
-    .settings-hero {
-        grid-template-columns: 1fr;
-        min-height: 0;
-        border-radius: 24px 24px 24px 8px;
-        padding: 28px 22px;
-    }
-
+    .settings-hero,
     .mistakes-hero {
-        grid-template-columns: 1fr;
+        grid-template-columns: minmax(0, 1fr);
+        gap: 14px;
         min-height: 0;
         border-radius: 24px 24px 24px 8px;
-        padding: 28px 22px;
+        padding: 20px 16px;
+        padding: clamp(14px, 4vw, 24px);
     }
 
     .study-hero h2,
     .practice-hero h2,
     .dictionary-hero h2,
     .progress-hero h2,
-    .settings-hero h2 {
-        font-size: clamp(2.2rem, 12vw, 3.7rem);
+    .settings-hero h2,
+    .mistakes-hero h2 {
+        font-size: 2rem;
+        font-size: clamp(1.75rem, 1.35rem + 3vw, 3.25rem);
+        line-height: 1.1;
+    }
+
+    .study-hero__copy > p:last-of-type,
+    .practice-hero > div > p:last-child,
+    .dictionary-hero > div > p:last-child,
+    .progress-hero__copy > p:last-of-type,
+    .settings-hero > div > p:last-child,
+    .mistakes-hero p:last-child {
+        margin-top: 10px;
+        line-height: 1.5;
+    }
+
+    .study-hero__actions {
+        margin-top: 14px;
+    }
+
+    .study-hero__actions .study-hero__start {
+        display: inline-flex;
+    }
+
+    .study-hero__actions > a {
+        min-height: 44px;
+        padding-inline: 12px;
     }
 
     .daily-orbit,
@@ -2754,6 +2876,14 @@ select {
 
     .deck-status {
         grid-template-columns: repeat(3, minmax(0, 1fr));
+        gap: 6px;
+        padding: 8px;
+    }
+
+    .deck-status > div {
+        flex-wrap: wrap;
+        gap: 4px 6px;
+        padding: 8px;
     }
 
     .deck-status p {
@@ -2769,10 +2899,17 @@ select {
 
     .deck-status > .deck-status__scope {
         grid-column: 1 / -1;
+        gap: 8px;
+    }
+
+    .deck-status__scope a {
+        display: inline-flex;
+        min-height: 44px;
+        align-items: center;
     }
 
     .daily-plan-strip {
-        grid-template-columns: 1fr;
+        grid-template-columns: minmax(0, 1fr);
         gap: 8px;
     }
 
@@ -2786,13 +2923,15 @@ select {
     }
 
     .word-card {
+        gap: 12px;
         min-height: 0;
         border-radius: 24px 24px 24px 8px;
-        padding: 16px;
+        padding: 12px;
     }
 
     .word-card__header {
-        align-items: flex-start;
+        align-items: center;
+        gap: 8px;
     }
 
     .word-card__audio span {
@@ -2800,13 +2939,35 @@ select {
     }
 
     .word-card__audio {
-        width: 42px;
+        width: 44px;
         padding: 0;
     }
 
     .word-card__face,
     .quiz-panel__prompt {
-        min-height: 310px;
+        min-height: 160px;
+        min-height: clamp(145px, 28vh, 235px);
+        padding: 16px;
+    }
+
+    .word-card__hanzi,
+    .quiz-panel__hanzi,
+    .dictionary-detail__character strong {
+        font-size: 3.6rem;
+        font-size: clamp(2.8rem, 13vw, 5.2rem);
+    }
+
+    .word-card__reveal {
+        min-height: 0;
+    }
+
+    .word-card__reveal > .primary-action {
+        justify-self: stretch;
+    }
+
+    .word-card__review {
+        gap: 12px;
+        padding-top: 12px;
     }
 
     .review-grid,
@@ -2815,17 +2976,24 @@ select {
     }
 
     .quiz-panel {
+        gap: 12px;
         border-radius: 24px 24px 24px 8px;
-        padding: 16px;
+        padding: 12px;
+    }
+
+    .quiz-options button {
+        min-height: 54px;
+        padding: 9px 10px;
     }
 
     .practice-toolbar,
     .dictionary-tools {
-        grid-template-columns: 1fr;
+        grid-template-columns: minmax(0, 1fr);
+        gap: 10px;
     }
 
     .dictionary-layout {
-        grid-template-columns: 1fr;
+        grid-template-columns: minmax(0, 1fr);
     }
 
     .dictionary-detail {
@@ -2841,7 +3009,7 @@ select {
     }
 
     .word-row {
-        grid-template-columns: 1fr;
+        grid-template-columns: minmax(0, 1fr);
     }
 
     .word-row footer {
@@ -2849,41 +3017,132 @@ select {
     }
 
     .level-progress {
-        grid-template-columns: 1fr;
+        grid-template-columns: minmax(0, 1fr);
     }
 
     .scenario-score-grid,
     .progress-word-list {
-        grid-template-columns: 1fr;
+        grid-template-columns: minmax(0, 1fr);
+    }
+
+    .analytics-section {
+        padding: 14px;
+    }
+
+    .app-dock {
+        position: fixed;
+        right: 8px;
+        right: max(8px, env(safe-area-inset-right, 0px));
+        bottom: var(--dock-gap);
+        bottom: max(var(--dock-gap), env(safe-area-inset-bottom, 0px));
+        left: 8px;
+        left: max(8px, env(safe-area-inset-left, 0px));
+        z-index: 30;
+        display: flex;
+        max-width: 740px;
+        align-items: center;
+        gap: 6px;
+        margin: 0 auto;
+        pointer-events: none;
     }
 
     .bottom-nav {
-        right: 8px;
-        left: 8px;
-        min-height: 68px;
+        position: static;
+        flex: 1;
+        min-width: 0;
+        max-width: none;
+        min-height: var(--dock-height);
+        margin: 0;
         border-radius: 20px;
+        padding: 4px;
+        pointer-events: auto;
     }
 }
 
-@media (max-width: 460px) {
-    .topbar {
-        gap: 10px;
+@media (max-width: 950px) and (max-height: 520px) {
+    :root {
+        --dock-height: 54px;
+        --sticky-header-offset: 8px;
     }
 
-    .brand__copy {
+    .topbar {
+        position: static;
+        margin-bottom: 10px;
+    }
+
+    .study-hero,
+    .practice-hero,
+    .dictionary-hero,
+    .progress-hero,
+    .mistakes-hero {
+        padding: 12px 16px;
+    }
+
+    .study-hero h2,
+    .practice-hero h2,
+    .dictionary-hero h2,
+    .progress-hero h2,
+    .mistakes-hero h2 {
+        font-size: 1.75rem;
+    }
+
+    .study-hero h2 br {
         display: none;
     }
 
-    .topbar__meter {
-        min-width: 98px;
+    .bottom-nav__icon {
+        width: 24px;
+        height: 24px;
+    }
+}
+
+@media (min-width: 520px) and (max-width: 950px) and (max-height: 520px) {
+    .study-hero__copy {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) minmax(10rem, 0.55fr);
+        align-items: center;
+        column-gap: 14px;
+    }
+
+    .study-hero__copy > p,
+    .study-hero__copy > h2 {
+        grid-column: 1;
     }
 
     .study-hero__actions {
         display: grid;
+        grid-column: 2;
+        grid-row: 1 / span 3;
+        margin-top: 0;
     }
 
-    .deck-status {
-        grid-template-columns: 1fr;
+    .word-card,
+    .quiz-panel {
+        grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+    }
+
+    .word-card__hanzi,
+    .quiz-panel__hanzi {
+        font-size: 3.25rem;
+    }
+
+    .quiz-panel__prompt {
+        grid-row: span 3;
+    }
+}
+
+@media (max-width: 460px) {
+    .brand__copy {
+        display: none;
+    }
+
+    .study-hero__copy {
+        display: flex;
+        flex-direction: column;
+    }
+
+    .study-hero__copy > p:last-of-type {
+        order: 1;
     }
 
     .deck-status p {
@@ -2895,23 +3154,23 @@ select {
         display: grid;
     }
 
-    .deck-status > .deck-status__scope {
-        grid-column: auto;
-    }
-
     .practice-mode-picker {
         display: flex;
-        margin-right: -12px;
         overflow-x: auto;
-        padding: 2px 12px 8px 0;
+        padding: 3px 3px 8px;
     }
 
     .practice-mode-picker button {
         flex: 0 0 145px;
     }
 
-    .word-card__meta span:nth-child(3) {
-        display: none;
+    .practice-mode-picker strong,
+    .practice-mode-picker small {
+        white-space: normal;
+    }
+
+    .dictionary-detail__character {
+        min-height: 140px;
     }
 
     .word-card__details,
@@ -2949,7 +3208,12 @@ select {
     }
 
     .progress-word-list > a {
-        grid-template-columns: 44px minmax(0, 1fr);
+        grid-template-columns: fit-content(30%) minmax(0, 1fr);
+    }
+
+    .progress-word-list > a > span:nth-child(2) small,
+    .today-word-review__grid span {
+        white-space: normal;
     }
 
     .progress-word-list__status {
@@ -2988,7 +3252,9 @@ select {
         animation-iteration-count: 1 !important;
         transition-duration: 0.01ms !important;
     }
-}select,
+}
+
+select,
 .search-box input,
 .assistant__form input,
 .goal-form input {
@@ -3069,6 +3335,7 @@ select {
 }
 
 .settings-list input[type="checkbox"] {
+    flex: 0 0 auto;
     width: 52px;
     height: 30px;
     accent-color: #167c80;
@@ -3097,16 +3364,20 @@ select {
 }
 
 .assistant {
+    --assistant-edge: 16px;
+
     position: fixed;
-    right: clamp(0.6rem, 3vw, 1.15rem);
-    bottom: calc(env(safe-area-inset-bottom, 0px) + clamp(5rem, 12dvh, 6rem));
+    right: var(--assistant-edge);
+    right: max(var(--assistant-edge), env(safe-area-inset-right, 0px));
+    bottom: 90px;
+    bottom: calc(env(safe-area-inset-bottom, 0px) + clamp(80px, var(--viewport-height) * 0.12, 96px));
     z-index: 30;
 }
 
 .assistant__bubble {
     display: grid;
-    width: clamp(2.8rem, 14vw, 3.6rem);
-    aspect-ratio: 1;
+    width: 56px;
+    height: 56px;
     place-items: center;
     border-radius: 50%;
     background: linear-gradient(135deg, #163033, #167c80);
@@ -3119,11 +3390,16 @@ select {
     right: 0;
     bottom: 72px;
     display: grid;
-    grid-template-rows: auto auto auto auto minmax(60px, 1fr) auto auto;
-    width: min(24rem, calc(100vw - 2rem));
-    height: min(38rem, calc(100dvh - env(safe-area-inset-top, 0px) - env(safe-area-inset-bottom, 0px) - clamp(5rem, 12dvh, 6rem) - 5.5rem));
-    max-height: min(38rem, calc(100dvh - env(safe-area-inset-top, 0px) - env(safe-area-inset-bottom, 0px) - clamp(5rem, 12dvh, 6rem) - 5.5rem));
-    overflow: hidden;
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-rows: auto minmax(60px, 1fr) auto auto;
+    width: calc(100vw - var(--assistant-edge) * 2);
+    width: calc(100vw - max(var(--assistant-edge), env(safe-area-inset-left, 0px)) - max(var(--assistant-edge), env(safe-area-inset-right, 0px)));
+    height: calc(var(--viewport-height) - 178px);
+    height: calc(var(--viewport-height) - 178px - env(safe-area-inset-top, 0px) - env(safe-area-inset-bottom, 0px));
+    max-width: 24rem;
+    max-height: 38rem;
+    overflow: auto;
+    overscroll-behavior: contain;
     border: 1px solid rgba(22, 48, 51, 0.14);
     border-radius: 12px;
     background: #fffdfa;
@@ -3149,12 +3425,19 @@ select {
 .assistant__header button,
 .assistant__form button {
     display: grid;
-    width: 38px;
-    height: 38px;
+    flex: 0 0 auto;
+    width: 44px;
+    height: 44px;
     place-items: center;
     border-radius: 50%;
     background: rgba(255, 255, 255, 0.12);
     color: inherit;
+}
+
+.assistant__body {
+    min-height: 0;
+    overflow-y: auto;
+    overscroll-behavior-y: contain;
 }
 
 .assistant__quick {
@@ -3176,10 +3459,10 @@ select {
 
 .assistant__messages {
     display: grid;
+    grid-template-columns: minmax(0, 1fr);
     align-content: start;
     gap: 10px;
     padding: 12px;
-    overflow-y: auto;
 }
 
 .assistant__message {
@@ -3205,7 +3488,7 @@ select {
 
 .assistant__form {
     display: grid;
-    grid-template-columns: 24px 1fr 42px;
+    grid-template-columns: 24px minmax(0, 1fr) 44px;
     align-items: center;
     gap: 8px;
     padding: 10px;
@@ -3214,6 +3497,7 @@ select {
 
 .assistant__form input {
     width: 100%;
+    min-width: 0;
     padding: 0 12px;
 }
 
@@ -3223,21 +3507,33 @@ select {
 }
 
 @media (max-width: 760px) {
-
     .goal-form {
-        grid-template-columns: 1fr;
-    }
-
-    .assistant {
-        right: max(0.6rem, env(safe-area-inset-right, 0px));
+        grid-template-columns: minmax(0, 1fr);
     }
 }
 
-@media (max-width: 420px) {
+@media (max-width: 720px), (max-width: 950px) and (max-height: 520px) {
+    .assistant {
+        --assistant-edge: 8px;
+
+        position: static;
+        flex: 0 0 auto;
+        pointer-events: auto;
+    }
+
+    .assistant__bubble {
+        width: 44px;
+        height: 44px;
+    }
 
     .assistant__panel {
-        right: max(-0.25rem, env(safe-area-inset-right, 0px));
-        width: min(24rem, calc(100vw - 1rem));
+        position: fixed;
+        right: var(--assistant-edge);
+        right: max(var(--assistant-edge), env(safe-area-inset-right, 0px));
+        bottom: var(--dock-clearance);
+        bottom: calc(var(--dock-clearance) + env(safe-area-inset-bottom, 0px));
+        height: calc(var(--viewport-height) - var(--dock-clearance) - 8px);
+        height: calc(var(--viewport-height) - var(--dock-clearance) - max(8px, env(safe-area-inset-top, 0px)) - env(safe-area-inset-bottom, 0px));
     }
 }
 
@@ -3272,8 +3568,6 @@ select {
 .assistant__consent {
     padding: 10px 14px;
     font-size: .82rem;
-    max-height: 180px;
-    overflow-y: auto;
     line-height: 1.5;
 }
 
@@ -3286,8 +3580,13 @@ select {
 @media (max-height: 650px) {
     .assistant__panel {
         position: fixed;
-        inset: max(8px, env(safe-area-inset-top, 0px)) max(8px, env(safe-area-inset-right, 0px)) auto auto;
-        height: calc(100dvh - max(8px, env(safe-area-inset-top, 0px)) - max(8px, env(safe-area-inset-bottom, 0px)));
+        top: 8px;
+        top: max(8px, env(safe-area-inset-top, 0px));
+        right: var(--assistant-edge);
+        right: max(var(--assistant-edge), env(safe-area-inset-right, 0px));
+        bottom: 8px;
+        bottom: max(8px, env(safe-area-inset-bottom, 0px));
+        height: auto;
         max-height: none;
     }
 }

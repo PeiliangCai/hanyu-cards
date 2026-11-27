@@ -207,7 +207,7 @@ async function reset() {
 
             <label>
                 <span>
-                    <strong>AI tutor floating button</strong>
+                    <strong>AI tutor button</strong>
                     <small>Show the tutor button and local learning notes.</small>
                 </span>
                 <input
@@ -334,11 +334,15 @@ async function reset() {
 
 .backup-actions {
     display: grid;
+    grid-template-columns: minmax(0, 1fr);
     gap: 0.75rem;
     justify-items: start;
 }
 
 .backup-actions input {
+    width: 100%;
+    min-width: 0;
+    min-height: 44px;
     max-width: 100%;
 }
 

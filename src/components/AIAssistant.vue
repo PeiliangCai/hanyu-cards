@@ -22,8 +22,10 @@ const content = useContentStore()
 const progress = useProgressStore()
 const settings = useSettingsStore()
 const draft = ref('')
-const messageList = ref<HTMLElement | null>(null)
+const panelBody = ref<HTMLElement | null>(null)
 const composer = ref<HTMLInputElement | null>(null)
+const trigger = ref<HTMLButtonElement | null>(null)
+const dismiss = ref<HTMLButtonElement | null>(null)
 
 watch(() => [settings.onlineAssistantEnabled, settings.assistantEnabled], () => {
     if (!settings.onlineAssistantEnabled || !settings.assistantEnabled)
@@ -31,13 +33,16 @@ watch(() => [settings.onlineAssistantEnabled, settings.assistantEnabled], () => 
 })
 watch(() => assistant.messages.length, async () => {
     await nextTick()
-    messageList.value?.scrollTo({ top: messageList.value.scrollHeight, behavior: 'smooth' })
+    panelBody.value?.scrollTo({ top: panelBody.value.scrollHeight, behavior: 'smooth' })
 })
 watch(() => assistant.isOpen, async (open) => {
-    if (open) {
-        await nextTick()
-        composer.value?.focus()
-    }
+    await nextTick()
+    if (!open)
+        trigger.value?.focus({ preventScroll: true })
+    else if (window.matchMedia('(pointer: coarse)').matches)
+        dismiss.value?.focus({ preventScroll: true })
+    else
+        composer.value?.focus({ preventScroll: true })
 })
 
 const recentMistakes = computed(() => {
@@ -81,6 +86,7 @@ function quickAsk(message: string) {
         v-if="settings.assistantEnabled"
         class="assistant">
         <button
+            ref="trigger"
             @click="assistant.toggle"
             class="assistant__bubble"
             type="button"
@@ -100,6 +106,7 @@ function quickAsk(message: string) {
                     <span>{{ settings.onlineAssistantEnabled ? 'Online tutor enabled' : 'Local study notes' }}</span>
                 </div>
                 <button
+                    ref="dismiss"
                     @click="assistant.toggle"
                     type="button"
                     aria-label="Close AI tutor">
@@ -107,64 +114,67 @@ function quickAsk(message: string) {
                 </button>
             </header>
 
-            <details class="assistant__consent">
-                <summary>Online AI &amp; privacy</summary>
-                <p>Online AI shares your message, up to six recent online chat messages, current word or mission, level, review counts, and recent mistake words with this app's server and its AI provider. Avoid personal or sensitive details. Parents should supervise use.</p>
-                <label>
-                    <input
-                        @change="settings.setOnlineAssistantEnabled(($event.target as HTMLInputElement).checked)"
-                        :checked="settings.onlineAssistantEnabled"
-                        type="checkbox" />
-                    Enable online AI for this device
-                </label>
-                <a
-                    href="/privacy.html"
-                    target="_blank"
-                    rel="noopener">Privacy details</a>
-            </details>
-
-            <div class="assistant__quick">
-                <button
-                    @click="quickAsk('Explain the current word with one example.')"
-                    type="button"
-                    :disabled="assistant.isLoading">Explain</button>
-                <button
-                    @click="quickAsk('Create a mnemonic for the current word.')"
-                    type="button"
-                    :disabled="assistant.isLoading">Mnemonic</button>
-                <button
-                    @click="quickAsk('Quiz me on my recent mistakes.')"
-                    type="button"
-                    :disabled="assistant.isLoading">Quiz me</button>
-                <button
-                    @click="quickAsk('Role-play the current real-life scenario with me. Start with one short line in Chinese and wait for my reply.')"
-                    type="button"
-                    :disabled="assistant.isLoading">Role-play</button>
-                <button
-                    @click="quickAsk('Make a focused 10-minute study plan from my level, due words, and recent mistakes.')"
-                    type="button"
-                    :disabled="assistant.isLoading">My plan</button>
-            </div>
-
             <div
-                class="assistant__status"
-                role="status">{{ assistant.status }}</div>
-            <div
-                ref="messageList"
-                class="assistant__messages"
-                role="log"
-                aria-label="Tutor conversation"
-                aria-live="polite">
-                <div
-                    v-for="message in assistant.messages"
-                    :key="message.id"
-                    :class="['assistant__message', `assistant__message--${message.role}`]">
-                    {{ message.content }}
+                ref="panelBody"
+                class="assistant__body">
+                <details class="assistant__consent">
+                    <summary>Online AI &amp; privacy</summary>
+                    <p>Online AI shares your message, up to six recent online chat messages, current word or mission, level, review counts, and recent mistake words with this app's server and its AI provider. Avoid personal or sensitive details. Parents should supervise use.</p>
+                    <label>
+                        <input
+                            @change="settings.setOnlineAssistantEnabled(($event.target as HTMLInputElement).checked)"
+                            :checked="settings.onlineAssistantEnabled"
+                            type="checkbox" />
+                        Enable online AI for this device
+                    </label>
+                    <a
+                        href="/privacy.html"
+                        target="_blank"
+                        rel="noopener">Privacy details</a>
+                </details>
+
+                <div class="assistant__quick">
+                    <button
+                        @click="quickAsk('Explain the current word with one example.')"
+                        type="button"
+                        :disabled="assistant.isLoading">Explain</button>
+                    <button
+                        @click="quickAsk('Create a mnemonic for the current word.')"
+                        type="button"
+                        :disabled="assistant.isLoading">Mnemonic</button>
+                    <button
+                        @click="quickAsk('Quiz me on my recent mistakes.')"
+                        type="button"
+                        :disabled="assistant.isLoading">Quiz me</button>
+                    <button
+                        @click="quickAsk('Role-play the current real-life scenario with me. Start with one short line in Chinese and wait for my reply.')"
+                        type="button"
+                        :disabled="assistant.isLoading">Role-play</button>
+                    <button
+                        @click="quickAsk('Make a focused 10-minute study plan from my level, due words, and recent mistakes.')"
+                        type="button"
+                        :disabled="assistant.isLoading">My plan</button>
                 </div>
+
                 <div
-                    v-if="assistant.isLoading"
-                    class="assistant__message assistant__message--assistant">
-                    Thinking...
+                    class="assistant__status"
+                    role="status">{{ assistant.status }}</div>
+                <div
+                    class="assistant__messages"
+                    role="log"
+                    aria-label="Tutor conversation"
+                    aria-live="polite">
+                    <div
+                        v-for="message in assistant.messages"
+                        :key="message.id"
+                        :class="['assistant__message', `assistant__message--${message.role}`]">
+                        {{ message.content }}
+                    </div>
+                    <div
+                        v-if="assistant.isLoading"
+                        class="assistant__message assistant__message--assistant">
+                        Thinking...
+                    </div>
                 </div>
             </div>
 

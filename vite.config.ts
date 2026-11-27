@@ -23,6 +23,10 @@ export default defineConfig(({ mode }) => ({
             },
         },
     },
+    build: {
+        // Older Android System WebViews need the max-width form of media queries.
+        cssTarget: ['chrome60', 'safari14'],
+    },
     plugins: [
         vue(),
         VitePWA({

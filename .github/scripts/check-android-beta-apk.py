@@ -24,6 +24,8 @@ CREDENTIAL_TEXT = re.compile(
     rb"-----BEGIN (?:[A-Z]+ )?PRIVATE KEY-----|api\.(?:openai\.com|agicto\.cn)",
     re.IGNORECASE,
 )
+MEDIA_RULE = re.compile(rb"@media\s*([^{}]+)\{")
+PHONE_BREAKPOINT = re.compile(rb"\(\s*max-width\s*:\s*720px\s*\)")
 
 
 def require(condition, message):
@@ -77,11 +79,20 @@ def check_assets(apk):
         entries = archive.namelist()
         require(len(entries) == len(set(entries)), "The APK contains duplicate entries.")
         require("assets/public/index.html" in entries, "Bundled web entry point is missing.")
+        media_rules = []
         for entry in entries:
             require(not CREDENTIAL_FILE.search(entry), f"Unexpected credential file in APK: {entry}.")
-            if entry.startswith("assets/") and Path(entry).suffix in {".js", ".json", ".html", ".css", ".map", ".txt"}:
-                require(not CREDENTIAL_TEXT.search(archive.read(entry)),
+            suffix = Path(entry).suffix
+            if entry.startswith("assets/") and suffix in {".js", ".json", ".html", ".css", ".map", ".txt"}:
+                content = archive.read(entry)
+                require(not CREDENTIAL_TEXT.search(content),
                         f"Unexpected credential or direct provider endpoint in {entry}.")
+                if suffix == ".css" and entry.startswith("assets/public/") and b".app-shell" in content:
+                    media_rules.extend(MEDIA_RULE.findall(content))
+
+        require(any(PHONE_BREAKPOINT.search(rule) for rule in media_rules)
+                and not any(b"<" in rule or b">" in rule for rule in media_rules),
+                "The bundled app stylesheet must preserve the phone breakpoint syntax for older WebViews.")
 
         config = json.loads(archive.read("assets/capacitor.config.json"))
         server = config.get("server", {})

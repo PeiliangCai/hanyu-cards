@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import {
     computed,
+    nextTick,
     onMounted,
     ref,
     watch,
@@ -35,6 +36,7 @@ const reviewClock = useReviewClock()
 const reveal = ref(false)
 const preparing = ref(true)
 const focusedReviewed = ref(false)
+const studyShortcut = ref<HTMLAnchorElement | null>(null)
 const planDate = computed(() => todayKey(reviewClock.value))
 const savingReview = ref(false)
 
@@ -85,6 +87,12 @@ const gradeSummary = computed(() => {
     }
 })
 
+function focusStudyCard() {
+    const card = document.getElementById('study-card')
+    card?.focus({ preventScroll: true })
+    card?.scrollIntoView({ block: 'start' })
+}
+
 async function preparePlan() {
     preparing.value = true
     await progress.hydrate()
@@ -118,6 +126,11 @@ async function review(grade: ReviewGrade) {
         await progress.reviewWord(word, grade, options)
         if (focused && focusedWordId.value === focusId)
             focusedReviewed.value = true
+        if (!focused && displayedWord.value && displayedWord.value.id !== word.id) {
+            await nextTick()
+            if (studyShortcut.value?.offsetWidth)
+                focusStudyCard()
+        }
     }
     finally {
         savingReview.value = false
@@ -146,9 +159,18 @@ watch(focusedWordId, () => {
         <section class="study-hero">
             <div class="study-hero__copy">
                 <p class="eyebrow">Today · A plan you can finish</p>
-                <h2>Build a little Mandarin<br />into every day.</h2>
+                <h2>Build a little Mandarin<br /> into every day.</h2>
                 <p>Your queue is fixed for today, so every card brings you closer to a clear finish.</p>
                 <div class="study-hero__actions">
+                    <a
+                        v-if="!preparing && displayedWord && !focusedReviewed"
+                        ref="studyShortcut"
+                        @click.prevent="focusStudyCard"
+                        href="#study-card"
+                        class="primary-action study-hero__start">
+                        {{ isFocusedStudy ? 'Review this word' : 'Study today’s cards' }}
+                        <ArrowForwardOutline></ArrowForwardOutline>
+                    </a>
                     <RouterLink
                         to="/mistakes"
                         class="secondary-action">
@@ -225,9 +247,11 @@ watch(focusedWordId, () => {
 
         <WordCard
             v-else-if="displayedWord && !focusedReviewed"
+            id="study-card"
             :key="`${isFocusedStudy ? 'focus' : 'daily'}-${displayedWord.id}`"
             @reveal="reveal = true"
             @review="review"
+            tabindex="-1"
             :word="displayedWord"
             :disabled="savingReview"
             :progress="progress.records[displayedWord.id]"

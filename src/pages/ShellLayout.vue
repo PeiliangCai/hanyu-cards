@@ -144,21 +144,23 @@ onMounted(async () => {
                 role="status">Loading your saved progress…</p>
         </main>
 
-        <nav
-            class="bottom-nav"
-            aria-label="Primary">
-            <RouterLink
-                v-for="item in navItems"
-                :key="item.to"
-                :to="item.to"
-                class="bottom-nav__item">
-                <span class="bottom-nav__icon">
-                    <component :is="item.icon"></component>
-                </span>
-                <span>{{ item.label }}</span>
-            </RouterLink>
-        </nav>
+        <div class="app-dock">
+            <nav
+                class="bottom-nav"
+                aria-label="Primary">
+                <RouterLink
+                    v-for="item in navItems"
+                    :key="item.to"
+                    :to="item.to"
+                    class="bottom-nav__item">
+                    <span class="bottom-nav__icon">
+                        <component :is="item.icon"></component>
+                    </span>
+                    <span>{{ item.label }}</span>
+                </RouterLink>
+            </nav>
 
-        <AIAssistant></AIAssistant>
+            <AIAssistant></AIAssistant>
+        </div>
     </div>
 </template>

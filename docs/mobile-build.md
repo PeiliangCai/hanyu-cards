@@ -44,7 +44,7 @@ npm run mobile:android:debug
 
 ### GitHub 公开预览版
 
-Android 预览版显示为 **HanYu Cards Preview**，应用 ID 为 `com.hanyucards.app.preview`，versionName 为 `1.0.0-beta.1`，versionCode 为 `1`。它沿用 release 构建设置，禁用调试，可与原有的 HanYu Cards 共存。两个应用各自保存学习进度，可通过设置中的备份导出和导入迁移进度。
+Android 预览版显示为 **HanYu Cards Preview**，应用 ID 为 `com.hanyucards.app.preview`，versionName 为 `1.0.0-beta.2`，versionCode 为 `2`。它沿用 release 构建设置，禁用调试，可与原有的 HanYu Cards 共存。两个应用各自保存学习进度，可通过设置中的备份导出和导入迁移进度。
 
 从发布提交检出的干净工作目录执行以下命令可生成 `android/app/build/outputs/apk/preview/app-preview-unsigned.apk`。
 
@@ -67,8 +67,8 @@ keytool -genkeypair -storetype PKCS12 -keystore "$preview_keystore" \
 
 ```bash
 build_tools="$ANDROID_HOME/build-tools/35.0.0"
-unsigned_apk=HanYu-Cards-1.0.0-beta.1-unsigned.apk
-signed_apk=HanYu-Cards-1.0.0-beta.1.apk
+unsigned_apk=HanYu-Cards-1.0.0-beta.2-unsigned.apk
+signed_apk=HanYu-Cards-1.0.0-beta.2.apk
 
 mkdir -p signed
 "$build_tools/zipalign" -P 16 -f 4 "$unsigned_apk" preview-aligned.apk
@@ -83,7 +83,9 @@ mkdir -p signed
 )
 ```
 
-创建 GitHub Release 草稿，目标设置为 `source.txt` 确认的完整提交 SHA，勾选 **This is a pre-release**，上传 `signed/` 中的 APK 与 `SHA256SUMS`。在同一发布提交运行 **Android beta** 的 `verify` 操作，输入草稿和 APK 的数字 ID、签名 APK 的 SHA-256 以及已核对的签名证书 SHA-256。检查安装、冷启动、离线学习、备份分享及升级后进度，通过验收后发布草稿。
+创建 GitHub Release 草稿，目标设置为 `source.txt` 确认的完整提交 SHA，勾选 **This is a pre-release**，上传 `signed/` 中的 APK 与 `SHA256SUMS`。在同一发布提交运行 **Android beta** 的 `verify` 操作，输入草稿和 APK 的数字 ID、签名 APK 的 SHA-256 以及已核对的签名证书 SHA-256。
+
+验证任务在 Android 13 和 15 模拟器上安装草稿中的同一个签名 APK，检查 320 × 640 dp、360 × 720 dp 竖屏和 640 × 320 dp 横屏的界面边界、导航以及离线翻词卡和评分，保留截图和实测控件坐标。任务还验证备份分享，并在校验已发布 beta.1 APK 的 SHA-256 后安装该版本、记录一张词卡的学习进度，然后原位升级到 beta.2 检查进度。通过验收后发布草稿。
 
 后续预览版继续使用同一个预览版签名密钥及应用 ID，并在 `android/app/build.gradle` 中递增预览版 versionCode。Android 使用这三项识别可原位升级的 APK，升级可以保留预览版进度。
 

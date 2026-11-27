@@ -5,6 +5,7 @@ Before this native packaging checklist, complete the [commercial release gates](
 ## Android
 
 - The [GitHub preview instructions](mobile-build.md#github-公开预览版) cover the separately signed prerelease APK and its verification workflow.
+- For the GitHub preview, check the signed draft APK on the narrow portrait and short landscape emulator profiles. Confirm offline review, backup sharing and progress after upgrading from the published beta.1 APK.
 - Build with Node 22.12+ and `npm run mobile:build`; see [mobile build instructions](mobile-build.md).
 - Run `npx cap sync android` after each web build.
 - Use Android Studio with an SDK and build tools compatible with the required target API.

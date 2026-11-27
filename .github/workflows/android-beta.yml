@@ -30,8 +30,8 @@ defaults:
     shell: bash
 
 env:
-  BETA_TAG: v1.0.0-beta.1
-  BETA_VERSION_CODE: "1"
+  BETA_TAG: v1.0.0-beta.2
+  BETA_VERSION_CODE: "2"
 
 jobs:
   build:
@@ -142,6 +142,11 @@ jobs:
           printf 'JAVA_HOME=%s\n' "$JAVA_HOME" >> "$GITHUB_ENV"
           python3 .github/scripts/check-android-beta-apk.py "$RUNNER_TEMP/$APK_NAME" "$EVIDENCE" \
             --version "${BETA_TAG#v}" --version-code "$BETA_VERSION_CODE" --signer-sha256 "$SIGNER_SHA256"
+      - name: Download the published beta.1 upgrade baseline
+        run: |
+          curl --fail --silent --show-error --location --retry 3 --max-time 60 \
+            --output "$RUNNER_TEMP/HanYu-Cards-1.0.0-beta.1.apk" \
+            https://github.com/PeiliangCai/hanyu-cards/releases/download/v1.0.0-beta.1/HanYu-Cards-1.0.0-beta.1.apk
       - name: Start a clean Android emulator and test the signed APK offline
         run: |
           test -c /dev/kvm
@@ -164,6 +169,7 @@ jobs:
           timeout 240 bash -c 'until [ "$(adb shell getprop sys.boot_completed 2>/dev/null | tr -d "\r")" = 1 ]; do kill -0 "$1" || exit 1; sleep 2; done' _ "$!"
           (cd "$RUNNER_TEMP" && sha256sum --check "$EVIDENCE/SHA256SUMS")
           python3 -u .github/scripts/smoke-android-beta.py "$RUNNER_TEMP/$APK_NAME" "$EVIDENCE" "$ANDROID_API" \
+            --version-code "$BETA_VERSION_CODE" --previous-apk "$RUNNER_TEMP/HanYu-Cards-1.0.0-beta.1.apk" \
             2>&1 | tee "$EVIDENCE/smoke.txt"
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         if: always()

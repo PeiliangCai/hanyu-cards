@@ -4,9 +4,10 @@ import assert from 'node:assert/strict'
 import { mkdir, readFile } from 'node:fs/promises'
 import { createRequire } from 'node:module'
 import { join } from 'node:path'
+import { verifyBrowserLayout } from './browser-layout.mjs'
 
 const require = createRequire(import.meta.url)
-const { chromium, devices } = require(process.env.PLAYWRIGHT_MODULE_PATH || 'playwright')
+const { chromium } = require(process.env.PLAYWRIGHT_MODULE_PATH || 'playwright')
 const baseURL = process.env.SMOKE_BASE_URL || 'http://127.0.0.1:8080'
 const output = process.env.SMOKE_ARTIFACTS || '/tmp/hanyu-browser-artifacts'
 await mkdir(output, { recursive: true })
@@ -192,35 +193,15 @@ try {
     await browser.close()
     console.log('Browser acceptance: recovery, focused study, practice and local missions passed')
 
-    // Offline/SW behavior was checked above; layout-only contexts avoid auto-update navigation races.
-    for (const width of [320, 390, 1280]) {
+    for (const [width, height] of [[320, 640], [360, 740], [390, 844], [740, 360], [1280, 844]]) {
         browser = await chromium.launch(launchOptions)
-        const mobile = await browser.newContext({ ...devices['iPhone 13'], deviceScaleFactor: 1, serviceWorkers: 'block', viewport: { width, height: 844 } })
-        const phone = await mobile.newPage()
-        phone.on('pageerror', error => errors.push(error.message))
-        phone.setDefaultTimeout(30_000)
-        for (const [route, heading] of Object.entries(routes)) {
-            await phone.goto(`${baseURL}/${route}`)
-            await phone.getByRole('heading', { name: heading }).waitFor()
-            const overflowing = await phone.evaluate(() => document.documentElement.scrollWidth > window.innerWidth)
-            assert.equal(overflowing, false, `${route} must fit a ${width}px viewport`)
-        }
-        await phone.goto(`${baseURL}/study`)
-        await phone.getByRole('button', { name: 'Reveal meaning', exact: true }).waitFor()
-        assert.equal(await phone.evaluate(() => document.documentElement.scrollWidth > window.innerWidth), false, `${width}px viewport should not overflow horizontally`)
-        await phone.screenshot({ path: join(output, `study-${width}.png`), fullPage: true, scale: 'css' })
-        await phone.getByRole('button', { name: 'Open AI tutor', exact: true }).click()
-        await phone.getByText('Online AI & privacy', { exact: true }).click()
-        const bounds = await phone.locator('.assistant__panel').boundingBox()
-        assert.ok(bounds && bounds.x >= 0 && bounds.x + bounds.width <= width && bounds.y >= 0 && bounds.y + bounds.height <= 844, `${width}px tutor panel must fit inside the viewport`)
-        await phone.screenshot({ path: join(output, `tutor-${width}.png`), fullPage: true, scale: 'css' })
-        await mobile.close()
+        await verifyBrowserLayout(browser, { baseURL, output, errors, routes, width, height })
         await browser.close()
-        console.log(`Browser acceptance: all routes fit ${width}px`)
+        console.log(`Browser acceptance: controls and content fit ${width}×${height}`)
     }
 
     assert.deepEqual(errors, [], 'Browser errors or CSP violations were recorded')
-    console.log(`Browser smoke passed: seven routes, fixed daily plans, mistake recovery, focused study, pagination, ten-question practice, local mission checks, backup export/reset/restore, invalid import, AI consent/mock, offline reload/search/reviews, all routes at 320/390/1280px. Artifacts: ${output}`)
+    console.log(`Browser smoke passed: seven routes, fixed daily plans, mistake recovery, focused study, pagination, ten-question practice, local mission checks, backup export/reset/restore, invalid import, AI consent/mock, offline reload/search/reviews, mobile and desktop layouts, WebView-compatible media queries. Artifacts: ${output}`)
 }
 finally {
     await browser.close()
