@@ -17,7 +17,7 @@
 - Node.js 22.12+，按 package-lock.json 使用 `npm ci` 安装。
 - Android：JDK 21、SDK 35；当前 minSdk 23、compileSdk/targetSdk 35、AGP 8.7.2。
 - iOS：macOS、适配该工程的 Xcode 和 CocoaPods；当前最低部署版本 14.0。
-- 应用 ID：`com.hanyucards.app`。Android versionCode 为 1，versionName 为 1.0。
+- 应用 ID 为 `com.hanyucards.app`。Android 调试和正式构建的 versionCode 为 1，versionName 为 1.0。
 
 这些是仓库现状，不代表符合应用商店当前准入要求。上架前需要另行升级及验证目标 SDK、签名、隐私清单与商店要求，见 [发布清单](release-checklist.md)。Linux 的网页构建和配置检查不能替代原生编译、签名及真机验收。
 
@@ -42,6 +42,53 @@ npm run mobile:android:debug
 
 命令完成类型检查、mobile 模式网页构建、Capacitor 同步和 Gradle 编译。调试 APK 位于 `android/app/build/outputs/apk/debug/app-debug.apk`。如缺少 SDK，此命令不能完成，不能据此声称原生包已验证。
 
+### GitHub 公开预览版
+
+Android 预览版显示为 **HanYu Cards Preview**，应用 ID 为 `com.hanyucards.app.preview`，versionName 为 `1.0.0-beta.1`，versionCode 为 `1`。它沿用 release 构建设置，禁用调试，可与原有的 HanYu Cards 共存。两个应用各自保存学习进度，可通过设置中的备份导出和导入迁移进度。
+
+从发布提交检出的干净工作目录执行以下命令可生成 `android/app/build/outputs/apk/preview/app-preview-unsigned.apk`。
+
+```bash
+npm ci
+VITE_ASSISTANT_API_URL='' npm run mobile:android:preview
+```
+
+在 `main` 的发布提交上手动运行 **Android beta** 的 `build` 操作，GitHub Actions 会在离线助教模式下构建 APK。下载 `hanyu-android-beta-unsigned` 工件，核对 `source.txt` 对应的提交，并在工件目录执行 `sha256sum -c SHA256SUMS`。在受信任的本机完成对齐和签名，GitHub Actions 无需签名密钥。[Android beta workflow](../.github/workflows/android-beta.yml)
+
+设置 `preview_keystore` 为仓库外的预览版密钥库绝对路径。仅在首次发布时创建密钥库，保留加密备份。`keytool` 和 `apksigner` 会交互式读取密码。
+
+```bash
+keytool -genkeypair -storetype PKCS12 -keystore "$preview_keystore" \
+  -alias hanyu-preview -keyalg RSA -keysize 3072 -validity 10000 \
+  -dname 'CN=HanYu Cards Android Preview'
+```
+
+在已解压的 Actions 工件目录签名，使用已安装的 Android SDK Build Tools 35。先用 `zipalign` 对齐 APK，再用预览版专用密钥签名。签名验证会输出证书 SHA-256 指纹，`SHA256SUMS` 记录签名后 APK 的 SHA-256。[zipalign](https://developer.android.com/tools/zipalign) · [apksigner](https://developer.android.com/tools/apksigner)
+
+```bash
+build_tools="$ANDROID_HOME/build-tools/35.0.0"
+unsigned_apk=HanYu-Cards-1.0.0-beta.1-unsigned.apk
+signed_apk=HanYu-Cards-1.0.0-beta.1.apk
+
+mkdir -p signed
+"$build_tools/zipalign" -P 16 -f 4 "$unsigned_apk" preview-aligned.apk
+"$build_tools/apksigner" sign --ks "$preview_keystore" --ks-key-alias hanyu-preview \
+  --v4-signing-enabled false --out "signed/$signed_apk" preview-aligned.apk
+"$build_tools/apksigner" verify --verbose --print-certs "signed/$signed_apk"
+"$build_tools/zipalign" -c -P 16 4 "signed/$signed_apk"
+(
+  cd signed
+  sha256sum "$signed_apk" > SHA256SUMS
+  sha256sum -c SHA256SUMS
+)
+```
+
+创建 GitHub Release 草稿，目标设置为 `source.txt` 确认的完整提交 SHA，勾选 **This is a pre-release**，上传 `signed/` 中的 APK 与 `SHA256SUMS`。在同一发布提交运行 **Android beta** 的 `verify` 操作，输入草稿和 APK 的数字 ID、签名 APK 的 SHA-256 以及已核对的签名证书 SHA-256。检查安装、冷启动、离线学习、备份分享及升级后进度，通过验收后发布草稿。
+
+后续预览版继续使用同一个预览版签名密钥及应用 ID，并在 `android/app/build.gradle` 中递增预览版 versionCode。Android 使用这三项识别可原位升级的 APK，升级可以保留预览版进度。
+
+### 正式 Android 构建
+
 正式签名需在本机配置四个环境变量，不提交密钥库或密码：
 
 ```text
@@ -55,7 +102,7 @@ HANYU_UPLOAD_KEY_PASSWORD     密钥密码
 npm run mobile:android:release
 ```
 
-命令检查配置与签名变量后构建 `android/app/build/outputs/bundle/release/app-release.aab`。每次发布递增 versionCode；在实际平台完成签名检查和设备测试。
+命令检查配置与签名变量后调用 `bundleRelease`，生成用于商店提交的 `android/app/build/outputs/bundle/release/app-release.aab`。手动从 `android/` 执行 `./gradlew assembleRelease` 可生成直接安装的正式 APK，配置正式签名时文件位于 `android/app/build/outputs/apk/release/app-release.apk`，未配置签名时生成 `app-release-unsigned.apk`。每次发布递增 versionCode，并完成签名检查和设备测试。
 
 ## iOS
 

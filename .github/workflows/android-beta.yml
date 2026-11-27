@@ -1,0 +1,174 @@
+name: Android beta
+run-name: Android beta ${{ inputs.operation }} for ${{ github.sha }}
+
+on:
+  workflow_dispatch:
+    inputs:
+      operation:
+        description: Build an unsigned APK or verify the signed draft asset
+        type: choice
+        options: [build, verify]
+        required: true
+      release_id:
+        description: Draft prerelease ID (verify)
+        type: string
+      asset_id:
+        description: Signed APK asset ID (verify)
+        type: string
+      apk_sha256:
+        description: Signed APK SHA-256 in lowercase hex (verify)
+        type: string
+      signer_sha256:
+        description: Preview signing certificate SHA-256 in lowercase hex (verify)
+        type: string
+
+permissions:
+  contents: read
+
+defaults:
+  run:
+    shell: bash
+
+env:
+  BETA_TAG: v1.0.0-beta.1
+  BETA_VERSION_CODE: "1"
+
+jobs:
+  build:
+    if: github.ref == 'refs/heads/main' && inputs.operation == 'build'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    env:
+      CI: "true"
+      CYPRESS_INSTALL_BINARY: "0"
+      VITE_ASSISTANT_API_URL: ""
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: "22"
+          cache: npm
+      - name: Build from the dispatched main commit
+        run: |
+          test "$(git rev-parse HEAD)" = "$GITHUB_SHA"
+          export JAVA_HOME="$JAVA_HOME_21_X64"
+          export PATH="$JAVA_HOME/bin:$PATH"
+          java -version
+          sdkmanager="$(command -v sdkmanager || find "$ANDROID_HOME/cmdline-tools" -type f -name sdkmanager -print -quit)"
+          "$sdkmanager" 'platforms;android-35' 'build-tools;35.0.0'
+          npm ci --no-audit --no-fund
+          npm run mobile:android:preview
+
+          EVIDENCE="$RUNNER_TEMP/hanyu-unsigned"
+          mkdir -p "$EVIDENCE"
+          unsigned_name="HanYu-Cards-${BETA_TAG#v}-unsigned.apk"
+          cp android/app/build/outputs/apk/preview/app-preview-unsigned.apk "$EVIDENCE/$unsigned_name"
+          python3 .github/scripts/check-android-beta-apk.py "$EVIDENCE/$unsigned_name" "$EVIDENCE" \
+            --version "${BETA_TAG#v}" --version-code "$BETA_VERSION_CODE"
+          git log -1 --format='%H %s' | tee "$EVIDENCE/source.txt"
+          (cd "$EVIDENCE" && sha256sum "$unsigned_name" | tee SHA256SUMS)
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: hanyu-android-beta-unsigned
+          path: ${{ runner.temp }}/hanyu-unsigned
+          if-no-files-found: error
+          retention-days: 14
+
+  verify:
+    if: github.ref == 'refs/heads/main' && inputs.operation == 'verify'
+    name: Verify signed APK (API ${{ matrix.api }})
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    permissions:
+      contents: write # GitHub restricts draft releases to users with push access.
+    strategy:
+      fail-fast: false
+      matrix:
+        api: [33, 35]
+    env:
+      ANDROID_API: ${{ matrix.api }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Download the exact APK attached to the draft
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_ID: ${{ inputs.release_id }}
+          ASSET_ID: ${{ inputs.asset_id }}
+          APK_SHA256: ${{ inputs.apk_sha256 }}
+          SIGNER_SHA256: ${{ inputs.signer_sha256 }}
+        run: |
+          test "$(git rev-parse HEAD)" = "$GITHUB_SHA"
+          APK_NAME="HanYu-Cards-${BETA_TAG#v}.apk"
+          EVIDENCE="$RUNNER_TEMP/hanyu-beta-evidence"
+          if ! [[ "$RELEASE_ID" =~ ^[1-9][0-9]{0,18}$ && "$ASSET_ID" =~ ^[1-9][0-9]{0,18}$ &&
+            "$APK_SHA256" =~ ^[0-9a-f]{64}$ && "$SIGNER_SHA256" =~ ^[0-9a-f]{64}$ ]]; then
+            echo 'Expected numeric release and asset IDs and lowercase SHA-256 digests.' >&2
+            exit 1
+          fi
+          if ! gh api "repos/$GITHUB_REPOSITORY/releases/$RELEASE_ID" | jq -e \
+            --arg tag "$BETA_TAG" --arg source "$GITHUB_SHA" \
+            --arg id "$ASSET_ID" --arg name "$APK_NAME" --arg digest "sha256:$APK_SHA256" '
+              .draft == true and .prerelease == true and
+              .tag_name == $tag and .target_commitish == $source and
+              any(.assets[]; (.id | tostring) == $id and .name == $name and
+                .state == "uploaded" and .size > 0 and (.digest == null or .digest == $digest))
+            ' > /dev/null; then
+            echo 'Draft tag, target commit, APK attachment or asset digest did not match.' >&2
+            exit 1
+          fi
+
+          mkdir -p "$EVIDENCE"
+          gh api -H 'Accept: application/octet-stream' \
+            "repos/$GITHUB_REPOSITORY/releases/assets/$ASSET_ID" > "$RUNNER_TEMP/$APK_NAME"
+          printf '%s  %s\n' "$APK_SHA256" "$APK_NAME" > "$EVIDENCE/SHA256SUMS"
+          (cd "$RUNNER_TEMP" && sha256sum --check "$EVIDENCE/SHA256SUMS")
+          git log -1 --format='%H %s' > "$EVIDENCE/source.txt"
+          printf 'Tag: %s\nDraft release ID: %s\nAsset ID: %s\n' "$BETA_TAG" "$RELEASE_ID" "$ASSET_ID" \
+            | tee "$EVIDENCE/release-asset.txt"
+          printf 'APK_NAME=%s\nEVIDENCE=%s\n' "$APK_NAME" "$EVIDENCE" >> "$GITHUB_ENV"
+      - name: Check APK metadata, permissions and signing certificate
+        env:
+          SIGNER_SHA256: ${{ inputs.signer_sha256 }}
+        run: |
+          export JAVA_HOME="$JAVA_HOME_21_X64"
+          export PATH="$JAVA_HOME/bin:$PATH"
+          sdkmanager="$(command -v sdkmanager || find "$ANDROID_HOME/cmdline-tools" -type f -name sdkmanager -print -quit)"
+          "$sdkmanager" 'build-tools;35.0.0'
+          printf '%s\n%s/bin\n' "$(dirname "$sdkmanager")" "$JAVA_HOME" >> "$GITHUB_PATH"
+          printf 'JAVA_HOME=%s\n' "$JAVA_HOME" >> "$GITHUB_ENV"
+          python3 .github/scripts/check-android-beta-apk.py "$RUNNER_TEMP/$APK_NAME" "$EVIDENCE" \
+            --version "${BETA_TAG#v}" --version-code "$BETA_VERSION_CODE" --signer-sha256 "$SIGNER_SHA256"
+      - name: Start a clean Android emulator and test the signed APK offline
+        run: |
+          test -c /dev/kvm
+          sudo chmod a+rw /dev/kvm
+          export ANDROID_AVD_HOME="$RUNNER_TEMP/hanyu-avd"
+          image="system-images;android-${ANDROID_API};google_apis;x86_64"
+          sdkmanager emulator "$image" platform-tools
+          mkdir -p "$ANDROID_AVD_HOME"
+          printf 'no\n' | avdmanager create avd --force --name hanyu-beta --package "$image" \
+            --device pixel_7 --path "$ANDROID_AVD_HOME/hanyu-beta.avd"
+          emulator="$ANDROID_HOME/emulator/emulator"
+          export PATH="$ANDROID_HOME/platform-tools:$PATH"
+          "$emulator" -list-avds | grep -Fx hanyu-beta
+          "$emulator" -accel-check
+
+          adb start-server
+          trap 'status=$?; timeout 10 adb emu kill || true; exit "$status"' EXIT
+          "$emulator" -avd hanyu-beta -accel on -gpu swiftshader -no-window -no-snapshot \
+            -no-boot-anim -no-audio > "$EVIDENCE/emulator.txt" 2>&1 &
+          timeout 240 bash -c 'until [ "$(adb shell getprop sys.boot_completed 2>/dev/null | tr -d "\r")" = 1 ]; do kill -0 "$1" || exit 1; sleep 2; done' _ "$!"
+          (cd "$RUNNER_TEMP" && sha256sum --check "$EVIDENCE/SHA256SUMS")
+          python3 -u .github/scripts/smoke-android-beta.py "$RUNNER_TEMP/$APK_NAME" "$EVIDENCE" "$ANDROID_API" \
+            2>&1 | tee "$EVIDENCE/smoke.txt"
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        if: always()
+        with:
+          name: hanyu-android-beta-api${{ matrix.api }}
+          path: ${{ runner.temp }}/hanyu-beta-evidence
+          if-no-files-found: ignore
+          retention-days: 30

@@ -36,6 +36,22 @@ android {
             }
             proguardFiles getDefaultProguardFile('proguard-android.txt'), 'proguard-rules.pro'
         }
+        preview {
+            initWith buildTypes.release
+            applicationIdSuffix ".preview"
+            matchingFallbacks = ['release']
+            // The preview APK is signed separately with its own key.
+            signingConfig = null
+        }
+    }
+}
+
+androidComponents {
+    onVariants(selector().withBuildType('preview')) { variant ->
+        variant.outputs.each { output ->
+            output.versionCode.set(1)
+            output.versionName.set('1.0.0-beta.1')
+        }
     }
 }
 

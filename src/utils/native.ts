@@ -55,10 +55,11 @@ export async function shareNativeTextFile(filename: string, contents: string) {
         import('@capacitor/share'),
     ])
     const result = await Filesystem.writeFile({
-        path: filename,
+        path: `shared-backups/${filename}`,
         data: contents,
         directory: Directory.Cache,
         encoding: Encoding.UTF8,
+        recursive: true,
     })
     await Share.share({
         title: 'HanYu Cards learning backup',
