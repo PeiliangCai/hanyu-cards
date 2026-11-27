@@ -1,12 +1,20 @@
 import { defineStore } from 'pinia'
 import localforage from 'localforage'
 import type {
+    DailyStudyPlan,
+    HskLevel,
     HskWord,
+    PracticeMode,
+    PracticeModeStats,
     ReviewGrade,
+    ScenarioEvaluation,
+    ScenarioProgress,
     StudySession,
     WordProgress,
 } from '@/types/learning'
+import { useSettingsStore } from '@/stores/settings'
 import {
+    dailyPlanKey,
     gradeToIntervalDays,
     nextStatus,
     todayKey,
@@ -14,6 +22,7 @@ import {
 import {
     MAX_PROGRESS_COUNT,
     type ProgressData,
+    emptyPracticeStats,
     isProgressId,
     parseProgressBackup,
     parseStoredProgress,
@@ -22,9 +31,19 @@ import {
 } from '@/utils/progressBackup'
 
 interface ProgressState extends ProgressData {
+    dailyPlans: Record<string, DailyStudyPlan>
+    practiceStats: Record<PracticeMode, PracticeModeStats>
+    scenarioProgress: Record<string, ScenarioProgress>
     hydrated: boolean
     storageError: string | null
     storageBlocked: boolean
+}
+
+interface ReviewOptions {
+    dailyPlanKey?: string
+    practiceMode?: PracticeMode
+    resolveMistake?: boolean
+    trackExtraWord?: boolean
 }
 
 interface PersistenceContext {
@@ -70,6 +89,10 @@ function applyData(store: ProgressState, data: ProgressData) {
     store.sessions = data.sessions
     store.dailyGoal = data.dailyGoal
     store.completedScenarioIds = data.completedScenarioIds
+    store.dailyPlans = data.dailyPlans ?? {}
+    store.practiceStats = data.practiceStats ?? emptyPracticeStats()
+    store.scenarioProgress = data.scenarioProgress ?? {}
+    store.lastSavedAt = data.lastSavedAt
 }
 
 async function writeData(store: ProgressState, data: ProgressData, replace = false): Promise<boolean> {
@@ -77,7 +100,7 @@ async function writeData(store: ProgressState, data: ProgressData, replace = fal
         return false
 
     try {
-        const payload = validateProgressData(data)
+        const payload = validateProgressData({ ...data, lastSavedAt: new Date().toISOString() })
 
         return await withStorageLock(async () => {
             const context = contextFor(store)
@@ -104,6 +127,7 @@ async function writeData(store: ProgressState, data: ProgressData, replace = fal
             const nextRevision = (revision ?? 0) + 1
             await localforage.setItem(STORE_KEY, { version: 1, revision: nextRevision, data: payload })
             context.revision = nextRevision
+            store.lastSavedAt = payload.lastSavedAt
             store.storageError = null
             store.storageBlocked = false
 
@@ -125,11 +149,32 @@ export const useProgressStore = defineStore('progress', {
         sessions: [],
         dailyGoal: 24,
         completedScenarioIds: [],
+        dailyPlans: {},
+        practiceStats: emptyPracticeStats(),
+        scenarioProgress: {},
         hydrated: false,
         storageError: null,
         storageBlocked: false,
     }),
     getters: {
+        todayPlan(state): DailyStudyPlan | undefined {
+            return state.dailyPlans[dailyPlanKey(todayKey())]
+        },
+        todayPlanCompletedCount(state) {
+            return state.dailyPlans[dailyPlanKey(todayKey())]?.completedWordIds.length ?? 0
+        },
+        todayPlanGoal(state) {
+            return state.dailyPlans[dailyPlanKey(todayKey())]?.goal ?? state.dailyGoal
+        },
+        todayExtraWordCount(state) {
+            return state.sessions.find((session) => session.date === todayKey())?.extraWordIds?.length ?? 0
+        },
+        activeMistakeCount(state) {
+            return Object.values(state.records).filter((record) => record.needsMistakeReview).length
+        },
+        totalStudySeconds(state) {
+            return state.sessions.reduce((sum, session) => sum + (session.studySeconds ?? 0), 0)
+        },
         todaySession(state): StudySession {
             return state.sessions.find((session) => session.date === todayKey()) ?? {
                 date: todayKey(), reviewed: 0, correct: 0, xp: 0,
@@ -181,8 +226,34 @@ export const useProgressStore = defineStore('progress', {
 
             return enqueue(this, () => writeData(this, this))
         },
-        async reviewWord(word: HskWord, grade: ReviewGrade) {
+        async ensureDailyPlan(key: string, date: string, level: HskLevel | 'all', wordIds: string[]) {
+            await this.hydrate()
+
+            return enqueue(this, async () => {
+                if (this.dailyPlans[key])
+                    return this.dailyPlans[key]
+                const uniqueIds = [...new Set(wordIds)].slice(0, this.dailyGoal)
+                const plan: DailyStudyPlan = {
+                    key, date, level, wordIds: uniqueIds, goal: uniqueIds.length,
+                    completedWordIds: [], results: {}, createdAt: new Date().toISOString(),
+                }
+                // Validate caller-supplied IDs and dates before changing live state.
+                const checked = validateProgressData({
+                    records: {}, sessions: [], dailyGoal: this.dailyGoal, completedScenarioIds: [], dailyPlans: { [key]: plan },
+                })
+                const normalized = checked.dailyPlans?.[key]
+                if (!normalized)
+                    throw new Error('Invalid daily study plan')
+                this.dailyPlans[key] = normalized
+                await writeData(this, this)
+
+                return this.dailyPlans[key]
+            })
+        },
+        async reviewWord(word: HskWord, grade: ReviewGrade, options: ReviewOptions = {}) {
             if (!isProgressId(word.id) || !Object.hasOwn(xpByGrade, grade))
+                return false
+            if (options.practiceMode && !Object.hasOwn(emptyPracticeStats(), options.practiceMode))
                 return false
             await this.hydrate()
 
@@ -206,6 +277,10 @@ export const useProgressStore = defineStore('progress', {
                     lastReviewedAt: new Date().toISOString(),
                     nextReviewAt: new Date(Date.now() + intervalDays * 24 * 60 * 60 * 1000).toISOString(),
                     status: nextStatus(grade, reviews, streak),
+                    mistakeCount: Math.min(MAX_PROGRESS_COUNT, (previous.mistakeCount ?? 0) + (isCorrect ? 0 : 1)),
+                    lastMistakeAt: isCorrect ? previous.lastMistakeAt : new Date().toISOString(),
+                    needsMistakeReview: grade === 'again'
+                        || (!(options.resolveMistake && (grade === 'good' || grade === 'easy')) && previous.needsMistakeReview === true),
                 }
                 const date = todayKey()
                 let session = this.sessions.find((item) => item.date === date)
@@ -216,6 +291,73 @@ export const useProgressStore = defineStore('progress', {
                 session.reviewed = Math.min(MAX_PROGRESS_COUNT, session.reviewed + 1)
                 session.correct = Math.min(MAX_PROGRESS_COUNT, session.correct + (isCorrect ? 1 : 0))
                 session.xp = Math.min(MAX_PROGRESS_COUNT, session.xp + xpByGrade[grade])
+                if (options.trackExtraWord && !session.extraWordIds?.includes(word.id))
+                    session.extraWordIds = [...(session.extraWordIds ?? []), word.id]
+                const plan = options.dailyPlanKey ? this.dailyPlans[options.dailyPlanKey] : undefined
+                if (plan?.wordIds.includes(word.id) && !plan.completedWordIds.includes(word.id)) {
+                    plan.completedWordIds.push(word.id)
+                    plan.results[word.id] = grade
+                    if (plan.completedWordIds.length === plan.wordIds.length)
+                        plan.completedAt = new Date().toISOString()
+                }
+                if (options.practiceMode) {
+                    const stats = this.practiceStats[options.practiceMode]
+                    stats.attempts = Math.min(MAX_PROGRESS_COUNT, stats.attempts + 1)
+                    stats.correct = Math.min(MAX_PROGRESS_COUNT, stats.correct + (isCorrect ? 1 : 0))
+                }
+
+                return writeData(this, this)
+            })
+        },
+        async resolveMistake(wordId: string) {
+            await this.hydrate()
+
+            return enqueue(this, async () => {
+                if (!isProgressId(wordId) || !this.records[wordId])
+                    return false
+                this.records[wordId].needsMistakeReview = false
+
+                return writeData(this, this)
+            })
+        },
+        async addStudySeconds(seconds: number, date = todayKey()) {
+            if (!Number.isFinite(seconds) || seconds <= 0 || date !== todayKey())
+                return false
+            await this.hydrate()
+
+            return enqueue(this, async () => {
+                let session = this.sessions.find((item) => item.date === date)
+                if (!session) {
+                    session = { date, reviewed: 0, correct: 0, xp: 0 }
+                    this.sessions.push(session)
+                }
+                session.studySeconds = Math.min(86_400, (session.studySeconds ?? 0) + Math.min(300, Math.round(seconds)))
+
+                return writeData(this, this)
+            })
+        },
+        async recordScenarioAttempt(scenarioId: string, evaluation: ScenarioEvaluation) {
+            if (!isProgressId(scenarioId))
+                return false
+            await this.hydrate()
+
+            return enqueue(this, async () => {
+                const previous = this.scenarioProgress[scenarioId]
+                const isBest = !previous || evaluation.score >= previous.bestScore
+                const result: ScenarioProgress = {
+                    scenarioId,
+                    attempts: Math.min(MAX_PROGRESS_COUNT, (previous?.attempts ?? 0) + 1),
+                    bestScore: isBest ? evaluation.score : previous.bestScore,
+                    lastScore: evaluation.score,
+                    lastAttemptAt: new Date().toISOString(),
+                    bestDimensions: isBest ? { ...evaluation.dimensions } : previous.bestDimensions,
+                    followUp: evaluation.followUp,
+                    source: evaluation.source,
+                }
+                validateProgressData({ records: {}, sessions: [], dailyGoal: this.dailyGoal, completedScenarioIds: [], scenarioProgress: { [scenarioId]: result } })
+                this.scenarioProgress[scenarioId] = result
+                if (evaluation.passed && evaluation.score >= 70 && !this.completedScenarioIds.includes(scenarioId))
+                    this.completedScenarioIds.push(scenarioId)
 
                 return writeData(this, this)
             })
@@ -226,7 +368,12 @@ export const useProgressStore = defineStore('progress', {
             await this.hydrate()
 
             return enqueue(this, async () => {
-                this.dailyGoal = Math.max(5, Math.min(120, Math.round(value)))
+                const nextGoal = Math.max(5, Math.min(120, Math.round(value)))
+                const key = dailyPlanKey(todayKey())
+                const plan = this.dailyPlans[key]
+                if (plan && plan.goal !== nextGoal && plan.completedWordIds.length === 0)
+                    delete this.dailyPlans[key]
+                this.dailyGoal = nextGoal
 
                 return writeData(this, this)
             })
@@ -246,7 +393,22 @@ export const useProgressStore = defineStore('progress', {
         async exportBackup() {
             await this.hydrate()
 
-            return enqueue(this, async () => serializeProgressBackup(this))
+            return enqueue(this, async () => serializeProgressBackup(this, new Date(), useSettingsStore().exportSettings()))
+        },
+        exportProgress(): ProgressData {
+            return validateProgressData(this)
+        },
+        async importProgress(value: unknown) {
+            const data = validateProgressData(value)
+            await this.hydrate()
+
+            return enqueue(this, async () => {
+                if (!await writeData(this, data, true))
+                    return false
+                applyData(this, { ...data, lastSavedAt: this.lastSavedAt })
+
+                return true
+            })
         },
         async importBackup(serialized: string) {
             // Validate before touching either the in-memory state or stored data.
@@ -256,7 +418,9 @@ export const useProgressStore = defineStore('progress', {
             return enqueue(this, async () => {
                 if (!await writeData(this, backup.data, true))
                     return false
-                applyData(this, backup.data)
+                applyData(this, { ...backup.data, lastSavedAt: this.lastSavedAt })
+                if (backup.preferences)
+                    useSettingsStore().importSettings(backup.preferences)
 
                 return true
             })
@@ -268,7 +432,7 @@ export const useProgressStore = defineStore('progress', {
                 const empty: ProgressData = { records: {}, sessions: [], dailyGoal: this.dailyGoal, completedScenarioIds: [] }
                 if (!await writeData(this, empty, true))
                     return false
-                applyData(this, empty)
+                applyData(this, { ...empty, lastSavedAt: this.lastSavedAt })
 
                 return true
             })

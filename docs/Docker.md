@@ -83,7 +83,7 @@ AI_TIMEOUT_MS=20000
 
 ## 构建与缓存
 
-- Node.js 22 与 Nginx 基础镜像固定到多架构 digest，依赖通过 `npm ci` 和锁文件安装；Dependabot 定期提出镜像、npm 和 Actions 更新。更新后需重新验收。
+- Docker 使用 Node.js 26，常规质量检查使用 Node.js 22。Node.js 与 Nginx 基础镜像固定到多架构 digest，依赖通过 `npm ci` 和锁文件安装；Dependabot 定期提出镜像、npm 和 Actions 更新。更新后需重新验收。
 - `.env`、各环境的 `.env.*`、常见私钥文件、Git、原生移动端构建文件和本地依赖不进入构建上下文。前端构建固定使用同源 API，不嵌入运行时凭证。
 - `/assets/` 成功响应使用一年不可变缓存；HTML、manifest 和服务工作线程使用 `no-cache` 重新验证；API 使用 `no-store`。静态资源缺失返回 404，页面深链接回退到首页。
 - 内置 CSP、`nosniff`、禁止 iframe、Referrer-Policy 和 Permissions-Policy。若增加外部分析、字体、音频或其他服务，需评估并同步修改 CSP；不要直接放开通配符。

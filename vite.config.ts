@@ -9,7 +9,7 @@ import * as path from 'path'
 dotenv.config({ path: `.env.${process.env.NODE_ENV}` })
 
 // https://vitejs.dev/config/
-export default defineConfig({
+export default defineConfig(({ mode }) => ({
     resolve: {
         alias: {
             '@@': path.resolve(__dirname, '.'),
@@ -26,7 +26,7 @@ export default defineConfig({
     plugins: [
         vue(),
         VitePWA({
-            disable: process.env.NODE_ENV === 'test',
+            disable: process.env.NODE_ENV === 'test' || mode === 'mobile',
             injectRegister: null,
             registerType: 'autoUpdate',
             workbox: {
@@ -78,4 +78,4 @@ export default defineConfig({
         host: true,
         port: 8080,
     },
-})
+}))

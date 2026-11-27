@@ -4,6 +4,7 @@ import type {
     ReviewGrade,
     WordProgress,
 } from '@/types/learning'
+import { speakNativeMandarin } from '@/utils/native'
 
 export const levelOptions: Array<{ label: string, value: HskLevel | 'all' }> = [
     { label: 'All HSK 1-3', value: 'all' },
@@ -35,7 +36,9 @@ export function normalizeSearch(value: string) {
 }
 
 export function isDue(progress?: WordProgress, now = new Date()) {
-    if (!progress?.nextReviewAt)
+    if (!progress)
+        return false
+    if (!progress.nextReviewAt)
         return true
 
     return new Date(progress.nextReviewAt).getTime() <= now.getTime()
@@ -79,7 +82,9 @@ export function formatDateTime(value?: string) {
     return date.toLocaleDateString(undefined, { month: 'short', day: 'numeric' })
 }
 
-export function speakMandarin(text: string) {
+export async function speakMandarin(text: string) {
+    if (await speakNativeMandarin(text))
+        return
     if (!('speechSynthesis' in window))
         return
 
@@ -106,8 +111,8 @@ export function wordMatchesSearch(word: HskWord, term: string) {
     ].some((value) => normalizeSearch(value).includes(query))
 }
 
-export function chooseQuizOptions(current: HskWord, pool: HskWord[]) {
-    const meaningKey = (word: HskWord) => word.english.trim().replace(/\s+/g, ' ').toLowerCase()
+export function chooseQuizOptions(current: HskWord, pool: HskWord[], display: (word: HskWord) => string = (word) => word.english) {
+    const meaningKey = (word: HskWord) => display(word).trim().replace(/\s+/g, ' ').toLowerCase()
     const seen = new Set([meaningKey(current)])
     const candidates = pool.filter((word) => {
         const meaning = meaningKey(word)
@@ -130,4 +135,56 @@ export function chooseQuizOptions(current: HskWord, pool: HskWord[]) {
     }
 
     return shuffle([...shuffle(candidates).slice(0, 3), current])
+}
+
+export function dailyPlanKey(date: string) {
+    return `${date}:all`
+}
+
+export function formatStudyTime(seconds: number) {
+    const total = Math.max(0, Math.round(seconds))
+    if (total < 60)
+        return `${total}s`
+    const minutes = Math.floor(total / 60)
+    if (minutes < 60)
+        return `${minutes}m`
+    const hours = Math.floor(minutes / 60)
+    const remainder = minutes % 60
+
+    return remainder ? `${hours}h ${remainder}m` : `${hours}h`
+}
+
+export function buildDailyWordIds(words: HskWord[], records: Record<string, WordProgress>, goal: number, now = new Date()) {
+    const date = todayKey(now)
+    const available = words.filter((word) => {
+        const lastReview = records[word.id]?.lastReviewedAt
+
+        return !lastReview || todayKey(new Date(lastReview)) !== date
+    })
+    const due = available.filter((word) => isDue(records[word.id], now))
+        .sort((left, right) => (records[left.id]?.nextReviewAt ?? '').localeCompare(records[right.id]?.nextReviewAt ?? ''))
+    const dueIds = new Set(due.map((word) => word.id))
+    const mistakes = available.filter((word) => records[word.id]?.needsMistakeReview && !dueIds.has(word.id))
+        .sort((left, right) => (records[right.id]?.lastMistakeAt ?? '').localeCompare(records[left.id]?.lastMistakeAt ?? ''))
+    const fresh = available.filter((word) => !records[word.id])
+        .sort((left, right) => (left.frequency ?? Number.MAX_SAFE_INTEGER) - (right.frequency ?? Number.MAX_SAFE_INTEGER))
+
+    return [...due, ...mistakes, ...fresh].slice(0, Math.max(0, Math.round(goal))).map((word) => word.id)
+}
+
+export function prioritizePracticeWords(words: HskWord[], records: Record<string, WordProgress>) {
+    return [...words]
+        .sort((left, right) => {
+            const leftRecord = records[left.id]
+            const rightRecord = records[right.id]
+            const mistakeOrder = Number(Boolean(rightRecord?.needsMistakeReview)) - Number(Boolean(leftRecord?.needsMistakeReview))
+            if (mistakeOrder)
+                return mistakeOrder
+
+            const leftAccuracy = leftRecord?.reviews ? leftRecord.correct / leftRecord.reviews : 0.5
+            const rightAccuracy = rightRecord?.reviews ? rightRecord.correct / rightRecord.reviews : 0.5
+
+            return leftAccuracy - rightAccuracy || (left.frequency ?? 99999) - (right.frequency ?? 99999)
+        })
+
 }

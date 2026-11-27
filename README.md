@@ -8,15 +8,16 @@
 - [生产部署手册](docs/Docker.md)
 - [词库质量审核](docs/content-audit.md)
 
-Offline-first Mandarin Chinese learning app for adult HSK learners. The app was rebuilt from the MIT-licensed `languages-learner/web` Vue 3 codebase and now focuses on Chinese vocabulary, smart review, and an optional AI tutor.
+Offline-first Mandarin Chinese learning app for individual HSK learners and parent-supported practice. The app was rebuilt from the MIT-licensed `languages-learner/web` Vue 3 codebase and now focuses on Chinese vocabulary, smart review, and an optional AI tutor.
 
 ## Features
 
 - HSK 1-3 vocabulary set with simplified, traditional, pinyin, English meanings, radicals, tags, and review status.
-- Flashcard study with `Again`, `Hard`, `Good`, and `Easy` spaced-review scheduling.
+- Fixed, resumable daily card routes with `Again`, `Hard`, `Good`, and `Easy` spaced-review scheduling, focused word study, and a mistake notebook.
 - Six progressive real-life missions for introductions, dining, shopping, transit, campus teamwork, and clinic visits.
-- Task-based lessons with learning goals, core expressions, bilingual dialogue, pronunciation, culture notes, and applied response checks.
-- Multiple-choice practice, searchable dictionary, daily goal, accuracy, due count, and level progress.
+- Task-based lessons with learning goals, core expressions, bilingual dialogue, pronunciation, culture notes, and local target-phrase checks. These checks measure phrase coverage, not grammar or fluency.
+- Five adaptive practice modes (meaning, hanzi, pinyin, listening, context) with ten-question summaries and persistent skill statistics.
+- Paginated dictionary and progress views, daily goals, extra-word tracking, study time, accuracy and due counts.
 - Device speech synthesis for Mandarin pronunciation.
 - Offline-first progress storage through IndexedDB/localforage.
 - Personalized learning analytics with a next-step recommendation, seven-day activity, XP, and mission completion.
@@ -67,9 +68,9 @@ npm run check
 npm audit
 ```
 
-`check` runs type checking, lint, frontend regression tests, Node API integration tests and a production build. API tests use injected test responses and do not spend provider credits. CI additionally builds the production containers and runs `python3 docker/smoke.py`.
+`check` runs type checking, lint, stylelint, frontend regression tests, Node API integration tests and a production build. API tests use injected test responses and do not spend provider credits. CI additionally builds the production containers and runs `python3 docker/smoke.py`.
 
-Settings supports versioned JSON backup and restore, including an explicit replacement preview. Storage failures remain visible while local study continues in memory. Backups exclude chat messages and AI consent; browser storage remains the only source of saved learning history until you export it. There is no account or automatic cloud sync. Concurrent tabs are protected when Web Locks is available; use one tab at a time otherwise.
+Settings supports versioned JSON backup and restore, including daily routes, mistakes, practice and mission results, study time and learning preferences, with an explicit replacement preview. Both previous main backups and render-deploy backups can be restored. Storage failures remain visible while local study continues in memory. Backups exclude chat messages and AI consent; browser storage remains the only source of saved learning history until you export it. There is no account or automatic cloud sync. Concurrent tabs are protected when Web Locks is available; use one tab at a time otherwise.
 
 ## Build
 
@@ -78,7 +79,7 @@ npm run build
 npx cap sync
 ```
 
-Android and iOS release details are in [docs/release-checklist.md](docs/release-checklist.md).
+Capacitor 7 native speech, haptics, Android back handling and backup sharing are included. Build instructions are in [docs/mobile-build.md](docs/mobile-build.md); release gates are in [docs/release-checklist.md](docs/release-checklist.md). Platform compilation, signing and device acceptance still require the platform SDKs.
 
 ## Compliance Notes
 

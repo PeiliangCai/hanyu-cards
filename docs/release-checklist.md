@@ -4,7 +4,7 @@ Before this native packaging checklist, complete the [commercial release gates](
 
 ## Android
 
-- Build with Node 22 LTS and `npm run build`.
+- Build with Node 22.12+ and `npm run mobile:build`; see [mobile build instructions](mobile-build.md).
 - Run `npx cap sync android` after each web build.
 - Use Android Studio with an SDK and build tools compatible with the required target API.
 - As checked on September 21, 2026, new phone apps and updates submitted after August 31, 2026 must target Android 16/API 36 or higher. Inspect and update the native project, then test Android 16 behavior changes; do not assume the checked-in native configuration is ready. See [Google Play target API requirements](https://developer.android.com/google/play/requirements/target-sdk).

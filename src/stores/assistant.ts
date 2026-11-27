@@ -2,6 +2,7 @@ import { defineStore } from 'pinia'
 import { markRaw } from 'vue'
 import type { AssistantContext } from '@/types/learning'
 import { useSettingsStore } from '@/stores/settings'
+import { hasSecureNativeAssistantEndpoint } from '@/utils/native'
 
 interface AssistantMessage {
     id: string
@@ -90,7 +91,7 @@ export const useAssistantStore = defineStore('assistant', {
             }
 
             const settings = useSettingsStore()
-            const online = settings.onlineAssistantEnabled && settings.assistantEnabled
+            const online = settings.onlineAssistantEnabled && settings.assistantEnabled && hasSecureNativeAssistantEndpoint()
             const history = this.messages.filter((message) => message.online).slice(-6)
                 .map(({ role, content }) => ({ role, content: content.slice(0, 2000) }))
             this.messages.push(createMessage('user', trimmed, online))

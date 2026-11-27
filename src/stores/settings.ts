@@ -1,12 +1,17 @@
 import { defineStore } from 'pinia'
+import type { HskLevel } from '@/types/learning'
 
 const SETTINGS_KEY = 'hanyu-settings-v1'
 
-interface SettingsState {
+export interface LearningPreferences {
     ttsEnabled: boolean
     assistantEnabled: boolean
-    onlineAssistantEnabled: boolean
     showTraditional: boolean
+    dailyStudyLevel: HskLevel | 'all'
+}
+
+interface SettingsState extends LearningPreferences {
+    onlineAssistantEnabled: boolean
     storageError: string | null
 }
 
@@ -15,7 +20,28 @@ const defaults: SettingsState = {
     assistantEnabled: true,
     onlineAssistantEnabled: false,
     showTraditional: false,
+    dailyStudyLevel: 'all',
     storageError: null,
+}
+
+export function validatePreferences(value: unknown): LearningPreferences {
+    if (!value || typeof value !== 'object' || Array.isArray(value))
+        throw new Error('Invalid learning preferences. Your settings have not been replaced.')
+    const raw = value as Record<string, unknown>
+    for (const key of ['ttsEnabled', 'assistantEnabled', 'showTraditional']) {
+        if (typeof raw[key] !== 'boolean')
+            throw new Error('Invalid learning preferences. Your settings have not been replaced.')
+    }
+    const level = raw.dailyStudyLevel ?? 'all'
+    if (level !== 'all' && level !== 1 && level !== 2 && level !== 3)
+        throw new Error('Invalid daily study level. Your settings have not been replaced.')
+
+    return {
+        ttsEnabled: raw.ttsEnabled as boolean,
+        assistantEnabled: raw.assistantEnabled as boolean,
+        showTraditional: raw.showTraditional as boolean,
+        dailyStudyLevel: level,
+    }
 }
 
 function loadSettings(): SettingsState {
@@ -30,6 +56,8 @@ function loadSettings(): SettingsState {
             if (typeof value === 'boolean')
                 result[key] = value
         }
+        if ('dailyStudyLevel' in saved && (saved.dailyStudyLevel === 1 || saved.dailyStudyLevel === 2 || saved.dailyStudyLevel === 3))
+            result.dailyStudyLevel = saved.dailyStudyLevel
 
         return result
     }
@@ -41,6 +69,16 @@ function loadSettings(): SettingsState {
 export const useSettingsStore = defineStore('settings', {
     state: () => loadSettings(),
     actions: {
+        exportSettings(): LearningPreferences {
+            return validatePreferences(this)
+        },
+        importSettings(value: unknown) {
+            const preferences = validatePreferences(value)
+            this.$patch(preferences)
+            // Consent belongs to this browser session and is never restored from a file.
+            this.onlineAssistantEnabled = false
+            this.persist()
+        },
         syncFromStorage() {
             this.$patch(loadSettings())
         },
@@ -51,6 +89,7 @@ export const useSettingsStore = defineStore('settings', {
                     assistantEnabled: this.assistantEnabled,
                     onlineAssistantEnabled: this.onlineAssistantEnabled,
                     showTraditional: this.showTraditional,
+                    dailyStudyLevel: this.dailyStudyLevel,
                 }))
                 this.storageError = null
             }
@@ -81,6 +120,12 @@ export const useSettingsStore = defineStore('settings', {
         },
         setShowTraditional(value: boolean) {
             this.showTraditional = value
+            this.persist()
+        },
+        setDailyStudyLevel(value: HskLevel | 'all') {
+            if (value !== 'all' && value !== 1 && value !== 2 && value !== 3)
+                return
+            this.dailyStudyLevel = value
             this.persist()
         },
     },

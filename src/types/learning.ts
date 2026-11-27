@@ -33,6 +33,9 @@ export interface WordProgress {
     lastReviewedAt?: string
     nextReviewAt?: string
     status: 'new' | 'learning' | 'reviewing' | 'mastered'
+    mistakeCount?: number
+    lastMistakeAt?: string
+    needsMistakeReview?: boolean
 }
 
 export interface StudySession {
@@ -40,6 +43,27 @@ export interface StudySession {
     reviewed: number
     correct: number
     xp: number
+    studySeconds?: number
+    extraWordIds?: string[]
+}
+
+export type PracticeMode = 'meaning' | 'hanzi' | 'pinyin' | 'listening' | 'context'
+
+export interface PracticeModeStats {
+    attempts: number
+    correct: number
+}
+
+export interface DailyStudyPlan {
+    key: string
+    date: string
+    level: HskLevel | 'all'
+    goal: number
+    wordIds: string[]
+    completedWordIds: string[]
+    results: Record<string, ReviewGrade>
+    createdAt: string
+    completedAt?: string
 }
 
 export interface ScenarioVocabulary {
@@ -86,4 +110,34 @@ export interface AssistantContext {
     dueCount: number
     masteredCount: number
     recentMistakes: HskWord[]
+}
+
+export type ScenarioEvaluationSource = 'agicto' | 'local' | 'mock'
+
+export interface ScenarioEvaluation {
+    passed: boolean
+    score: number
+    feedback: string
+    strengths: string[]
+    improvements: string[]
+    source: ScenarioEvaluationSource
+    dimensions: ScenarioEvaluationDimensions
+    followUp: string
+}
+
+export interface ScenarioEvaluationDimensions {
+    completeness: number
+    naturalness: number
+    accuracy: number
+}
+
+export interface ScenarioProgress {
+    scenarioId: string
+    attempts: number
+    bestScore: number
+    lastScore: number
+    lastAttemptAt: string
+    bestDimensions: ScenarioEvaluationDimensions
+    followUp: string
+    source: ScenarioEvaluationSource
 }

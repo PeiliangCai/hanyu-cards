@@ -2,7 +2,7 @@
 
 import { createPinia, setActivePinia } from 'pinia'
 import { flushPromises, mount } from '@vue/test-utils'
-import { beforeEach, describe, expect, it } from 'vitest'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
 import ScenariosPage from '@/pages/ScenariosPage.vue'
 import localforage from 'localforage'
 import { useProgressStore } from '@/stores/progress'
@@ -22,7 +22,7 @@ describe('page/ScenariosPage', () => {
         await wrapper.get('.scenario-task .primary-action').trigger('click')
         await flushPromises()
         expect(useProgressStore().completedScenarioIds).toEqual([])
-        expect(wrapper.get('.task-feedback').text()).toContain('Try one')
+        await vi.waitFor(() => expect(wrapper.get('.task-feedback').text()).toContain('Build your answer'))
     })
 
     it('checks an applied response and completes the active mission', async () => {
@@ -44,7 +44,7 @@ describe('page/ScenariosPage', () => {
         await wrapper.get('.scenario-task .primary-action').trigger('click')
         await flushPromises()
 
-        expect(wrapper.get('.task-feedback').text()).toContain('Mission complete')
+        await vi.waitFor(() => expect(wrapper.get('.task-feedback').text()).toContain('Mission complete'))
         expect(progress.completedScenarioIds).toContain('first-meeting')
     })
 })

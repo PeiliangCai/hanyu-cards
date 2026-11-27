@@ -101,4 +101,45 @@ describe('progress backup validation', () => {
         expect(() => parseStoredProgress({ version: 2, revision: 1, data: data() })).toThrow('unsupported')
         expect(() => parseStoredProgress({ version: 1, revision: -1, data: data() })).toThrow('revision')
     })
+
+    it('migrates render backups, preserving daily results, mistakes and skills without restoring online consent', () => {
+        const progress = {
+            ...data(),
+            dailyPlans: {
+                '2026-01-02:1': {
+                    key: '2026-01-02:1', date: '2026-01-02', level: 1, goal: 1,
+                    wordIds: ['hsk1-0001'], completedWordIds: ['hsk1-0001'],
+                    results: { 'hsk1-0001': 'again' }, createdAt: '2026-01-02T00:00:00.000Z',
+                },
+            },
+            practiceStats: { pinyin: { attempts: 3, correct: 2 } },
+        }
+        Object.assign(progress.records['hsk1-0001'], { lastGrade: 'again', streak: 0, mistakeCount: 1 })
+        const backup = parseProgressBackup(JSON.stringify({
+            app: 'hanyu-cards', version: 1, exportedAt: '2026-01-03T00:00:00.000Z', progress,
+            settings: { ttsEnabled: true, assistantEnabled: true, showTraditional: true, dailyStudyLevel: 2, onlineAssistantEnabled: true },
+        }))
+        expect(backup.data.dailyPlans?.['2026-01-02:all'].results).toEqual({ 'hsk1-0001': 'again' })
+        expect(backup.data.records['hsk1-0001'].needsMistakeReview).toBe(true)
+        expect(backup.data.practiceStats?.pinyin).toEqual({ attempts: 3, correct: 2 })
+        expect(backup.data.practiceStats?.context).toEqual({ attempts: 0, correct: 0 })
+        expect(backup.preferences?.dailyStudyLevel).toBe(2)
+        expect(JSON.stringify(backup)).not.toContain('onlineAssistantEnabled')
+        expect(parseProgressBackup(serializeProgressBackup(backup.data)).data).toEqual(backup.data)
+    })
+
+    it('rejects inconsistent daily plans and unsafe added statistics', () => {
+        const plan = {
+            key: '2026-01-02:all', date: '2026-01-02', level: 'all', goal: 1,
+            wordIds: ['hsk1-0001'], completedWordIds: ['hsk1-0001'],
+            results: { 'hsk1-0001': 'good' }, createdAt: '2026-01-02T00:00:00.000Z',
+        }
+        for (const patch of [{ goal: 2 }, { completedWordIds: ['other'] }, { results: {} }, { results: { 'hsk1-0001': 'perfect' } }, { date: '2026-02-30' }]) {
+            expect(() => validateProgressData({ ...data(), dailyPlans: { [plan.key]: { ...plan, ...patch } } })).toThrow('Invalid learning data')
+        }
+        expect(() => validateProgressData({ ...data(), practiceStats: { meaning: { attempts: 1, correct: 2 } } })).toThrow('practice correct count')
+        expect(() => validateProgressData({ ...data(), sessions: [{ ...data().sessions[0], studySeconds: 86_401 }] })).toThrow('study seconds')
+        expect(() => validateProgressData({ ...data(), scenarioProgress: JSON.parse('{"__proto__":{}}') })).toThrow('mission identifier')
+        expect(() => parseProgressBackup(JSON.stringify({ app: 'hanyu-cards', format: 'other', version: 1 }))).toThrow('not a HanYu')
+    })
 })

@@ -33,7 +33,12 @@
   ],
   "exclude": [
     "src/components/InterfaceLanguageSelector/**",
-    "src/composables/**",
+    "src/composables/useAppBreakpoints.ts",
+    "src/composables/useItemsSelection.ts",
+    "src/composables/useLearningLanguage.ts",
+    "src/composables/useRequestMethod.ts",
+    "src/composables/useVirtualScrollListItemEmits.ts",
+    "src/composables/useVoiceover.ts",
     "src/hooks/**",
     "src/modules/**",
     "src/plugins/errorHandler.ts",

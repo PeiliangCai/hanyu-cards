@@ -6,6 +6,8 @@ import {
 } from 'vue'
 import { useProgressStore } from '@/stores/progress'
 import { useSettingsStore } from '@/stores/settings'
+import { levelOptions } from '@/utils/learning'
+import { isNativeApp, shareNativeTextFile } from '@/utils/native'
 import {
     MAX_BACKUP_BYTES,
     type ProgressBackup,
@@ -50,10 +52,17 @@ async function exportBackup() {
     busy.value = true
     try {
         const serialized = await progress.exportBackup()
+        const filename = `hanyu-progress-${new Date().toISOString().slice(0, 10)}.json`
+        if (isNativeApp()) {
+            await shareNativeTextFile(filename, serialized)
+            notify('Backup shared. Keep the file safe; it contains your learning history.')
+
+            return
+        }
         const url = URL.createObjectURL(new Blob([serialized], { type: 'application/json' }))
         const link = document.createElement('a')
         link.href = url
-        link.download = `hanyu-progress-${new Date().toISOString().slice(0, 10)}.json`
+        link.download = filename
         document.body.append(link)
         link.click()
         link.remove()
@@ -170,6 +179,20 @@ async function reset() {
                 type="button">Retry Saving Progress</button>
         </div>
 
+        <label class="daily-set-field">
+            <span>Daily study set</span>
+            <select
+                @change="settings.setDailyStudyLevel(($event.target as HTMLSelectElement).value === 'all' ? 'all' : Number(($event.target as HTMLSelectElement).value) as 1 | 2 | 3)"
+                :value="settings.dailyStudyLevel"
+                aria-label="Choose the word level for future daily routes">
+                <option
+                    v-for="option in levelOptions"
+                    :key="option.value"
+                    :value="option.value">{{ option.label }}</option>
+            </select>
+            <small>The next new route uses this level. A route already started today stays fixed.</small>
+        </label>
+
         <div class="settings-list">
             <label>
                 <span>
@@ -238,7 +261,7 @@ async function reset() {
         <article class="privacy-note backup-panel">
             <h3>Back up your learning</h3>
             <p>Progress is stored in this browser on this device. Clearing browser data or uninstalling can remove it. Download a backup regularly, or use one to move your progress to another device.</p>
-            <p>Backups include word reviews, study history, completed missions, and your daily target. Chat messages and device preferences are excluded. Files are not encrypted; keep them somewhere private.</p>
+            <p>Backups include word reviews, daily plans, mistakes, practice scores, mission results, study time, your daily target, and learning preferences. Chat messages and online AI consent are excluded. Files are not encrypted; keep them somewhere private.</p>
             <div class="backup-actions">
                 <button
                     @click="exportBackup"
@@ -265,7 +288,7 @@ async function reset() {
                     <li>{{ pendingBackup.data.completedScenarioIds.length }} completed missions</li>
                     <li>{{ pendingBackup.data.dailyGoal }} reviews per day</li>
                 </ul>
-                <p><strong>This replaces all current learning progress on this device. Download your current backup first to keep a copy.</strong></p>
+                <p><strong>This replaces all current learning progress and any backed-up learning preferences on this device. Online AI stays off after preferences are restored. Download your current backup first to keep a copy.</strong></p>
                 <div class="backup-confirm-actions">
                     <button
                         @click="confirmImport"
