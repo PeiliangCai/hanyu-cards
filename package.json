@@ -65,7 +65,7 @@
     "@capacitor/haptics": "^7.0.2",
     "@capacitor/keyboard": "^7.0.3",
     "@capacitor/share": "^7.0.4",
-    "@capacitor/status-bar": "^7.0.3",
+    "@capacitor/status-bar": "^8.0.4",
     "@vicons/ionicons5": "^0.12.0",
     "cors": "^2.8.5",
     "dayjs": "^1.10.7",
