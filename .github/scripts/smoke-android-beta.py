@@ -136,9 +136,24 @@ def capture_screenshot(path, dimensions=None):
     require(len(screenshot) > 24 and screenshot.startswith(b"\x89PNG\r\n\x1a\n"),
             "Unable to save the Android screenshot.")
     path.write_bytes(screenshot)
+    actual = struct.unpack(">II", screenshot[16:24])
     if dimensions:
-        actual = struct.unpack(">II", screenshot[16:24])
         require(actual == dimensions, f"{path.name}: display is {actual}, expected {dimensions} pixels.")
+    return actual
+
+
+def wait_for_display(path, dimensions):
+    deadline = time.monotonic() + 12
+    actual = capture_screenshot(path)
+    while actual != dimensions and time.monotonic() < deadline:
+        time.sleep(0.6)
+        actual = capture_screenshot(path)
+    return actual
+
+
+def start_preview():
+    launch = adb("shell", "am", "start", "-W", "-n", ACTIVITY, timeout=60)
+    require("Status: ok" in launch, f"Unable to launch preview: {launch}")
 
 
 def backup_chooser_has_read_grant(activities):
@@ -334,8 +349,7 @@ class AppScreen:
                 "The tutor obscures a primary navigation link.")
 
     def launch_today(self):
-        launch = adb("shell", "am", "start", "-W", "-n", ACTIVITY, timeout=60)
-        require("Status: ok" in launch, f"Unable to launch preview: {launch}")
+        start_preview()
         self.find(TODAY)
 
     def cards_complete(self, count, scroll=None):
@@ -350,7 +364,7 @@ class AppScreen:
                 "The Android keyboard opened before the learner tapped the tutor composer.")
         self.snapshot("tutor")
 
-        if self.rotation:
+        if self.width > self.height:
             # Older WebViews expose the editable node without its ARIA name in UI Automator.
             editors = [node for node in self.nodes if node.get("class") == "android.widget.EditText"
                        and node.get("enabled") == "true" and node.get("clickable") == "true"]
@@ -410,16 +424,36 @@ def check_failures(output):
 
 
 def phone_screen(output, width, height, rotation=0):
-    adb("shell", "am", "force-stop", PACKAGE)
+    output.mkdir(parents=True, exist_ok=True)
+    dimensions = (width * 2, height * 2)
     adb("shell", "wm", "density", "320")
-    natural_width, natural_height = (height, width) if rotation else (width, height)
-    adb("shell", "wm", "size", f"{natural_width * 2}x{natural_height * 2}")
-    adb("shell", "wm", "user-rotation", "lock", str(rotation))
+    adb("shell", "wm", "fixed-to-user-rotation", "enabled")
+
+    def configure_display(display_rotation):
+        adb("shell", "am", "force-stop", PACKAGE)
+        natural_width, natural_height = dimensions[::-1] if display_rotation else dimensions
+        adb("shell", "wm", "size", f"{natural_width}x{natural_height}")
+        adb("shell", "wm", "user-rotation", "lock", str(display_rotation))
+        start_preview()
+        # Launcher or system orientation requests can interfere until the app is foregrounded.
+        adb("shell", "wm", "user-rotation", "lock", str(display_rotation))
+        return wait_for_display(output / "display.png", dimensions)
+
+    actual = configure_display(rotation)
+    mode = f"Android display rotation {rotation}"
+    if actual != dimensions and rotation:
+        print(f"The rotated display stayed at {actual} pixels. Applying a landscape display size directly.")
+        rotation = 0
+        actual = configure_display(rotation)
+        mode = "landscape display size override at rotation 0"
+    require(actual == dimensions,
+            f"Android displayed {actual} pixels instead of {dimensions}. See {output.name}/display.png.")
+
     screen = AppScreen(output, rotation=rotation, phone=True)
-    require((screen.width, screen.height, screen.density) == (width * 2, height * 2, 320),
+    require((screen.width, screen.height, screen.density) == (*dimensions, 320),
             "Android did not apply the requested phone dimensions and density.")
-    print(f"Checking {width}×{height} dp at {screen.density} dpi, rotation {rotation}.")
-    screen.launch_today()
+    print(f"Checking {width}×{height} dp at {screen.density} dpi with {mode}.")
+    screen.find(TODAY)
     return screen
 
 
@@ -503,6 +537,7 @@ def main():
         adb("uninstall", PACKAGE)
         adb("shell", "wm", "size", "reset")
         adb("shell", "wm", "density", "reset")
+        adb("shell", "wm", "fixed-to-user-rotation", "default")
         check_upgrade(args.previous_apk, args.apk, args.version_code, args.output)
     finally:
         capture_screenshot(args.output / "android.png")
