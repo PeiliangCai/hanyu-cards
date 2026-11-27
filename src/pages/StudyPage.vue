@@ -36,7 +36,7 @@ const reviewClock = useReviewClock()
 const reveal = ref(false)
 const preparing = ref(true)
 const focusedReviewed = ref(false)
-const studyShortcut = ref<HTMLAnchorElement | null>(null)
+const studyShortcut = ref<HTMLButtonElement | null>(null)
 const planDate = computed(() => todayKey(reviewClock.value))
 const savingReview = ref(false)
 
@@ -63,6 +63,7 @@ const dailyActiveWord = computed(() => remainingWords.value[0])
 const focusedWordId = computed(() => typeof route.query.word === 'string' ? route.query.word : '')
 const focusedWord = computed(() => content.words.find((word) => word.id === focusedWordId.value))
 const isFocusedStudy = computed(() => Boolean(focusedWord.value))
+const studyShortcutLabel = computed(() => isFocusedStudy.value ? 'Review this word' : 'Study today’s cards')
 const focusedWordInPlan = computed(() => {
     return Boolean(focusedWord.value && currentPlan.value?.wordIds.includes(focusedWord.value.id))
 })
@@ -162,15 +163,16 @@ watch(focusedWordId, () => {
                 <h2>Build a little Mandarin<br /> into every day.</h2>
                 <p>Your queue is fixed for today, so every card brings you closer to a clear finish.</p>
                 <div class="study-hero__actions">
-                    <a
+                    <button
                         v-if="!preparing && displayedWord && !focusedReviewed"
                         ref="studyShortcut"
-                        @click.prevent="focusStudyCard"
-                        href="#study-card"
-                        class="primary-action study-hero__start">
-                        {{ isFocusedStudy ? 'Review this word' : 'Study today’s cards' }}
-                        <ArrowForwardOutline></ArrowForwardOutline>
-                    </a>
+                        @click="focusStudyCard"
+                        class="primary-action study-hero__start"
+                        type="button"
+                        :aria-label="studyShortcutLabel">
+                        {{ studyShortcutLabel }}
+                        <ArrowForwardOutline aria-hidden="true"></ArrowForwardOutline>
+                    </button>
                     <RouterLink
                         to="/mistakes"
                         class="secondary-action">

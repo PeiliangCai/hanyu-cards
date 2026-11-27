@@ -341,6 +341,39 @@ class AppScreen:
     def cards_complete(self, count, scroll=None):
         return self.find(rf"^Daily route: {count} of [1-9]\d* assigned cards completed\b", scroll=scroll)
 
+    def check_tutor(self):
+        self.tap(TUTOR)
+        full_height = self.viewport.height
+        self.find(r"^Local study notes$")
+        close = self.find(r"^Close AI tutor$", action=True)
+        require(self.viewport.height >= full_height - self.dp(8),
+                "The Android keyboard opened before the learner tapped the tutor composer.")
+        self.snapshot("tutor")
+
+        if self.rotation:
+            # Older WebViews expose the editable node without its ARIA name in UI Automator.
+            editors = [node for node in self.nodes if node.get("class") == "android.widget.EditText"
+                       and node.get("enabled") == "true" and node.get("clickable") == "true"]
+            require(len(editors) == 1, "Expected one editable field in the tutor.")
+            composer = Target("Message to tutor", node_bounds(editors[0]))
+            issue = self.visibility_issue(composer, self.visible_area(), action=True)
+            require(not issue, f"{composer.name}: {issue}.")
+            self.press(composer)
+            adb("shell", "input", "text", "Review")
+            self.find(r"^Send message$", action=True)
+            require(self.viewport.height <= full_height - self.dp(48),
+                    "The app did not resize for the Android keyboard after tapping the composer.")
+            self.snapshot("tutor-keyboard")
+
+            adb("shell", "input", "keyevent", "KEYCODE_BACK")
+            self.find(r"^Local study notes$")
+            close = self.find(r"^Close AI tutor$", action=True)
+            require(self.viewport.height >= full_height - self.dp(8),
+                    "The Android keyboard did not dismiss when Back was pressed.")
+            print("The tutor accepted input with the Android keyboard open and remained open after Back dismissed it.")
+
+        self.press(close)
+
     def check_backup_chooser(self, count):
         self.tap(SETTINGS)
         self.find(r"^Learning preferences$", content=True)
@@ -393,11 +426,7 @@ def phone_screen(output, width, height, rotation=0):
 def review_on_phone(screen, completed):
     screen.cards_complete(completed)
     screen.check_phone_layout()
-    screen.tap(TUTOR)
-    screen.find(r"^Local study notes$")
-    screen.snapshot("tutor")
-    screen.tap(r"^Close AI tutor$")
-
+    screen.check_tutor()
     screen.tap(r"^Progress$")
     screen.find(r"^Small steps become\b", content=True)
     screen.snapshot("progress")

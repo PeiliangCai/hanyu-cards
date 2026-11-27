@@ -130,16 +130,20 @@ async function tap(page, locator, label, { center = false, fraction = 0.5 } = {}
 }
 
 async function verifyStudyCard(page) {
+    const study = page.getByRole('button', { name: 'Study today’s cards', exact: true })
     const reveal = page.getByRole('button', { name: 'Reveal meaning', exact: true })
-    const jump = page.getByRole('link', { name: 'Study today’s cards', exact: true })
-    const canJump = await jump.isVisible()
-    await tap(page, canJump ? jump : reveal, 'First-viewport Today action')
-    if (canJump) {
-        assert.ok(await page.locator('.word-card').evaluate(element => element === document.activeElement), 'Opening Today’s card must move focus to it')
-        await onScreen(page.locator('.word-card__hanzi'), 'Today’s word after opening the card')
-        await tap(page, reveal, 'Reveal meaning after opening the card')
-    }
+    assert.ok(await study.isVisible(), 'Today must expose a Study today’s cards button on mobile')
+    assert.ok(await study.isEnabled() && await study.evaluate(element => element instanceof HTMLButtonElement), 'The Study shortcut must be an enabled HTML button')
+    const url = page.url()
+    await tap(page, study, 'First-viewport Study button')
+    assert.equal(page.url(), url, 'Opening Today’s card must preserve the current URL')
+    assert.ok(await page.locator('.word-card').evaluate(element => element === document.activeElement), 'Opening Today’s card must move focus to it')
+    await onScreen(page.locator('.word-card__hanzi'), 'Today’s word after opening the card')
+    await tap(page, reveal, 'Reveal meaning after opening the card')
     await page.locator('.word-card__meaning p').waitFor()
+    await tap(page, page.getByRole('button', { name: /^Good/ }), 'First daily review rating', { center: true })
+    await page.getByText('Card 2 of 24', { exact: true }).waitFor()
+    assert.equal(await page.locator('.topbar__meter strong').textContent(), '1/24', 'The rating must advance Today’s progress')
 }
 
 async function verifyTomorrowLink(page, baseURL, output) {
@@ -218,8 +222,10 @@ export async function verifyBrowserLayout(browser, { baseURL, output, errors, ro
                 await page.screenshot({ path: join(output, `study-${width}.png`), scale: 'css' })
                 if (width < 500 || !mobile)
                     assert.equal(await page.locator('.study-plan-ring').isVisible(), !mobile, 'Today’s progress ring must follow the viewport layout')
-                if (width === 360 || height === 360)
+                if (mobile)
                     await verifyStudyCard(page)
+                else
+                    assert.equal(await page.getByRole('button', { name: 'Study today’s cards', exact: true }).isVisible(), false, 'Desktop keeps its full study-card layout')
             }
             assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth), `${route} must fit a ${width}px viewport`)
             await verifyHorizontalLayout(page, width, `${route} at ${width}×${height}`)

@@ -23,7 +23,6 @@ const progress = useProgressStore()
 const settings = useSettingsStore()
 const draft = ref('')
 const panelBody = ref<HTMLElement | null>(null)
-const composer = ref<HTMLInputElement | null>(null)
 const trigger = ref<HTMLButtonElement | null>(null)
 const dismiss = ref<HTMLButtonElement | null>(null)
 
@@ -37,12 +36,10 @@ watch(() => assistant.messages.length, async () => {
 })
 watch(() => assistant.isOpen, async (open) => {
     await nextTick()
-    if (!open)
-        trigger.value?.focus({ preventScroll: true })
-    else if (window.matchMedia('(pointer: coarse)').matches)
+    if (open)
         dismiss.value?.focus({ preventScroll: true })
     else
-        composer.value?.focus({ preventScroll: true })
+        trigger.value?.focus({ preventScroll: true })
 })
 
 const recentMistakes = computed(() => {
@@ -183,7 +180,6 @@ function quickAsk(message: string) {
                 class="assistant__form">
                 <ChatbubbleEllipsesOutline></ChatbubbleEllipsesOutline>
                 <input
-                    ref="composer"
                     v-model="draft"
                     type="text"
                     autocomplete="off"

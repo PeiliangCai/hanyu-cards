@@ -2850,7 +2850,8 @@ select {
         display: inline-flex;
     }
 
-    .study-hero__actions > a {
+    .study-hero__actions > a,
+    .study-hero__actions > button {
         min-height: 44px;
         padding-inline: 12px;
     }
@@ -3588,6 +3589,20 @@ select,
         bottom: max(8px, env(safe-area-inset-bottom, 0px));
         height: auto;
         max-height: none;
+    }
+}
+
+@media (max-height: 180px) {
+    .assistant__form {
+        padding-top: 4px;
+        padding-bottom: 4px;
+    }
+
+    .assistant__form:focus-within {
+        position: sticky;
+        bottom: 0;
+        z-index: 1;
+        background: #fffdfa;
     }
 }
 
