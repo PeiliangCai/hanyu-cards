@@ -80,6 +80,50 @@ def adb(*args, check=True, timeout=30):
     return result.stdout.strip()
 
 
+def diagnostic_adb(*args):
+    try:
+        return adb(*args, check=False, timeout=12)
+    except (OSError, subprocess.SubprocessError) as error:
+        return f"Unable to collect {' '.join(args)}: {error}"
+
+
+def record_clock(stage):
+    host_before = time.time()
+    guest = diagnostic_adb("shell", "date", "+%s.%N")
+    host_after = time.time()
+    print(f"Clock {stage}: guest={guest}, host=[{host_before:.3f}, {host_after:.3f}] Unix seconds.")
+
+
+def collect_diagnostics(output, failure=False):
+    output.mkdir(parents=True, exist_ok=True)
+    commands = {
+        "activity-lastanr.txt": ("shell", "dumpsys", "activity", "lastanr"),
+        "cpuinfo.txt": ("shell", "dumpsys", "cpuinfo"),
+        "memory.txt": ("shell", "cat", "/proc/meminfo"),
+        "app-memory.txt": ("shell", "dumpsys", "meminfo", PACKAGE),
+        "processes.txt": ("shell", "ps", "-A"),
+    }
+    if failure:
+        commands.update({
+            "input.txt": ("shell", "dumpsys", "input"),
+            "system-log.txt": ("logcat", "-d", "-b", "main", "-b", "system", "-t", "2500", "-s",
+                               "ActivityManager", "WindowManager", "InputDispatcher", "InputTransport",
+                               "AndroidRuntime", "chromium", "cr_AwContents", "cr_ChildProcessConn",
+                               "SurfaceFlinger", "OpenGLRenderer", "lmkd"),
+            "dropbox-app-anr.txt": ("shell", "dumpsys", "dropbox", "--print", "data_app_anr"),
+        })
+    for name, command in commands.items():
+        (output / name).write_text(diagnostic_adb(*command) + "\n")
+
+    if failure:
+        traces = diagnostic_adb("shell", "ls", "-1t", "/data/anr")
+        (output / "anr-files.txt").write_text(traces + "\n")
+        recent = next((name for name in traces.splitlines() if re.fullmatch(r"anr_[\d._-]+", name)), None)
+        if recent:
+            trace = diagnostic_adb("shell", "head", "-n", "1800", f"/data/anr/{recent}")
+            (output / "recent-anr.txt").write_text(trace + "\n")
+
+
 def prepare_device(api):
     require(adb("shell", "getprop", "ro.kernel.qemu") == "1", "The smoke test requires an Android emulator.")
     require(not adb("shell", "pm", "path", PACKAGE, check=False).startswith("package:"),
@@ -105,6 +149,7 @@ def prepare_device(api):
             and adb("shell", "settings", "get", "global", "wifi_on") == "0",
             "Unable to put the emulator offline.")
     print("Airplane mode enabled, Wi-Fi and mobile data disabled.")
+    adb("shell", "wm", "fixed-to-user-rotation", "enabled")
     adb("logcat", "-c", "-b", "main", "-b", "system", "-b", "crash", "-b", "events")
 
 
@@ -145,9 +190,12 @@ def capture_screenshot(path, dimensions=None):
 def wait_for_display(path, dimensions):
     deadline = time.monotonic() + 12
     actual = capture_screenshot(path)
-    while actual != dimensions and time.monotonic() < deadline:
+    while time.monotonic() < deadline:
         time.sleep(0.6)
-        actual = capture_screenshot(path)
+        current = capture_screenshot(path)
+        if actual == current == dimensions:
+            return current
+        actual = current
     return actual
 
 
@@ -198,6 +246,7 @@ class AppScreen:
         self.output.mkdir(parents=True, exist_ok=True)
         self.rotation = rotation
         self.phone = phone
+        self.window_current = False
         dimensions = re.findall(r"(\d+)x(\d+)", adb("shell", "wm", "size"))
         densities = re.findall(r"(?:Physical|Override) density: (\d+)", adb("shell", "wm", "density"))
         require(dimensions and densities, "Unable to determine the display size and density.")
@@ -210,14 +259,16 @@ class AppScreen:
         return round(size * self.density / 160)
 
     def read_window(self):
-        adb("shell", "rm", "-f", WINDOW)
-        adb("shell", "uiautomator", "dump", WINDOW, check=False)
-        xml = adb("exec-out", "cat", WINDOW, check=False)
+        self.window_current = False
+        xml = adb("shell", f"rm -f {WINDOW} && uiautomator dump {WINDOW} >/dev/null && cat {WINDOW}", check=False)
         try:
             tree = ET.fromstring(xml)
         except ET.ParseError:
             return False
         (self.output / "window.xml").write_text(xml + "\n")
+        for node in tree.iter("node"):
+            if node.get("package") == "android" and node.get("text") == "HanYu Cards Preview isn't responding":
+                raise RuntimeError("Android showed an ANR dialog for HanYu Cards Preview.")
         if tree.get("rotation") != str(self.rotation):
             return False
         self.xml = xml
@@ -226,6 +277,7 @@ class AppScreen:
             if node.get("class") == "android.webkit.WebView":
                 self.viewport = node_bounds(node)
                 if self.viewport.width > 0 and self.viewport.height > 0:
+                    self.window_current = True
                     return True
         return False
 
@@ -270,11 +322,11 @@ class AppScreen:
                 return f"the tutor obscures the center of {bounds}"
         return ""
 
-    def find_many(self, patterns, *, action=False, content=False, scroll=None, minimum=None):
+    def find_many(self, patterns, *, action=False, content=False, scroll=None, minimum=None, absent=()):
         deadline = time.monotonic() + 45
         issues = []
         while time.monotonic() < deadline:
-            if not self.read_window():
+            if not (self.window_current or self.read_window()):
                 time.sleep(0.5)
                 continue
             area = self.visible_area(content)
@@ -283,6 +335,7 @@ class AppScreen:
                 (pattern, self.visibility_issue(target, area, action, content, minimum))
                 for pattern, target in zip(patterns, targets)
             ]
+            issues.extend((pattern, "still visible") for pattern in absent if self.target(pattern))
             if not any(issue for _, issue in issues):
                 for target in targets:
                     print(f"Visible {target.name}: {target.bounds}")
@@ -298,7 +351,8 @@ class AppScreen:
                 under_header = visible_targets and min(target.bounds.top for target in visible_targets) < area.top
                 if scroll == "up" or under_header:
                     start, end = end, start
-                adb("shell", "input", "swipe", str(x), str(start), str(x), str(end), "650")
+                self.input("swipe", str(x), str(start), str(x), str(end), "650")
+            self.window_current = False
             time.sleep(0.3)
         details = ", ".join(f"{pattern}: {issue}" for pattern, issue in issues if issue)
         raise RuntimeError(f"Unable to reach {patterns!r}. {details}. See {self.output.name}/window.xml.")
@@ -306,9 +360,13 @@ class AppScreen:
     def find(self, pattern, **options):
         return self.find_many((pattern,), **options)[0]
 
+    def input(self, *args):
+        self.window_current = False
+        adb("shell", "input", *args)
+
     def press(self, target):
         x, y = target.bounds.center
-        adb("shell", "input", "tap", str(x), str(y))
+        self.input("tap", str(x), str(y))
 
     def tap(self, pattern, **options):
         self.press(self.find(pattern, action=True, **options))
@@ -349,44 +407,53 @@ class AppScreen:
                 "The tutor obscures a primary navigation link.")
 
     def launch_today(self):
+        self.window_current = False
         start_preview()
         self.find(TODAY)
 
     def cards_complete(self, count, scroll=None):
         return self.find(rf"^Daily route: {count} of [1-9]\d* assigned cards completed\b", scroll=scroll)
 
-    def check_tutor(self):
-        self.tap(TUTOR)
-        full_height = self.viewport.height
-        self.find(r"^Local study notes$")
-        close = self.find(r"^Close AI tutor$", action=True)
-        require(self.viewport.height >= full_height - self.dp(8),
-                "The Android keyboard opened before the learner tapped the tutor composer.")
-        self.snapshot("tutor")
-
-        if self.width > self.height:
-            # Older WebViews expose the editable node without its ARIA name in UI Automator.
-            editors = [node for node in self.nodes if node.get("class") == "android.widget.EditText"
-                       and node.get("enabled") == "true" and node.get("clickable") == "true"]
-            require(len(editors) == 1, "Expected one editable field in the tutor.")
-            composer = Target("Message to tutor", node_bounds(editors[0]))
-            issue = self.visibility_issue(composer, self.visible_area(), action=True)
-            require(not issue, f"{composer.name}: {issue}.")
-            self.press(composer)
-            adb("shell", "input", "text", "Review")
-            self.find(r"^Send message$", action=True)
-            require(self.viewport.height <= full_height - self.dp(48),
-                    "The app did not resize for the Android keyboard after tapping the composer.")
-            self.snapshot("tutor-keyboard")
-
-            adb("shell", "input", "keyevent", "KEYCODE_BACK")
+    def check_tutor(self, repetitions=1):
+        for attempt in range(1, repetitions + 1):
+            record_clock(f"before opening tutor {attempt}")
+            self.tap(TUTOR)
+            full_height = self.viewport.height
             self.find(r"^Local study notes$")
             close = self.find(r"^Close AI tutor$", action=True)
             require(self.viewport.height >= full_height - self.dp(8),
-                    "The Android keyboard did not dismiss when Back was pressed.")
-            print("The tutor accepted input with the Android keyboard open and remained open after Back dismissed it.")
+                    "The Android keyboard opened before the learner tapped the tutor composer.")
+            self.snapshot("tutor" if attempt == 1 else f"tutor-{attempt}")
+            record_clock(f"tutor {attempt} opened")
+            if self.width > self.height:
+                close = self.check_tutor_keyboard(full_height)
 
-        self.press(close)
+            self.press(close)
+            self.find(TUTOR, action=True, absent=(r"^AI tutor$", r"^Close AI tutor$"))
+            record_clock(f"tutor {attempt} closed")
+
+    def check_tutor_keyboard(self, full_height):
+        # Older WebViews expose the editable node without its ARIA name in UI Automator.
+        editors = [node for node in self.nodes if node.get("class") == "android.widget.EditText"
+                   and node.get("enabled") == "true" and node.get("clickable") == "true"]
+        require(len(editors) == 1, "Expected one editable field in the tutor.")
+        composer = Target("Message to tutor", node_bounds(editors[0]))
+        issue = self.visibility_issue(composer, self.visible_area(), action=True)
+        require(not issue, f"{composer.name}: {issue}.")
+        self.press(composer)
+        self.input("text", "Review")
+        self.find(r"^Send message$", action=True)
+        require(self.viewport.height <= full_height - self.dp(48),
+                "The app did not resize for the Android keyboard after tapping the composer.")
+        self.snapshot("tutor-keyboard")
+
+        self.input("keyevent", "KEYCODE_BACK")
+        self.find(r"^Local study notes$")
+        close = self.find(r"^Close AI tutor$", action=True)
+        require(self.viewport.height >= full_height - self.dp(8),
+                "The Android keyboard did not dismiss when Back was pressed.")
+        print("The tutor accepted input with the Android keyboard open and remained open after Back dismissed it.")
+        return close
 
     def check_backup_chooser(self, count):
         self.tap(SETTINGS)
@@ -400,7 +467,7 @@ class AppScreen:
             if backup_chooser_has_read_grant(activities):
                 print("Android opened the share chooser with a read grant for the backup JSON.")
                 capture_screenshot(self.output / "backup-chooser.png")
-                adb("shell", "input", "keyevent", "KEYCODE_BACK")
+                self.input("keyevent", "KEYCODE_BACK")
                 self.find(backup_button, content=True)
                 self.cards_complete(count, scroll="up")
                 print("Dismissed the chooser and returned to the app with saved progress.")
@@ -427,17 +494,26 @@ def phone_screen(output, width, height, rotation=0):
     output.mkdir(parents=True, exist_ok=True)
     dimensions = (width * 2, height * 2)
     adb("shell", "wm", "density", "320")
-    adb("shell", "wm", "fixed-to-user-rotation", "enabled")
 
     def configure_display(display_rotation):
         adb("shell", "am", "force-stop", PACKAGE)
         natural_width, natural_height = dimensions[::-1] if display_rotation else dimensions
         adb("shell", "wm", "size", f"{natural_width}x{natural_height}")
         adb("shell", "wm", "user-rotation", "lock", str(display_rotation))
+        display_sample = output / "display.png"
+        actual = wait_for_display(display_sample, dimensions)
+        record_clock(f"display before app launch at {actual}, rotation request {display_rotation}")
+        if actual != dimensions and not display_rotation:
+            return actual
         start_preview()
-        # Launcher or system orientation requests can interfere until the app is foregrounded.
-        adb("shell", "wm", "user-rotation", "lock", str(display_rotation))
-        return wait_for_display(output / "display.png", dimensions)
+        record_clock("cold app launch completed")
+        actual = capture_screenshot(display_sample)
+        if actual == dimensions:
+            return actual
+        if display_rotation:
+            # A launcher orientation request can prevent rotation while the app is stopped.
+            adb("shell", "wm", "user-rotation", "lock", str(display_rotation))
+        return wait_for_display(display_sample, dimensions)
 
     actual = configure_display(rotation)
     mode = f"Android display rotation {rotation}"
@@ -460,7 +536,7 @@ def phone_screen(output, width, height, rotation=0):
 def review_on_phone(screen, completed):
     screen.cards_complete(completed)
     screen.check_phone_layout()
-    screen.check_tutor()
+    screen.check_tutor(repetitions=3 if completed == 0 else 1)
     screen.tap(r"^Progress$")
     screen.find(r"^Small steps become\b", content=True)
     screen.snapshot("progress")
@@ -518,13 +594,17 @@ def main():
     parser.add_argument("--previous-apk", type=Path, required=True)
     args = parser.parse_args()
     args.output.mkdir(parents=True, exist_ok=True)
-    prepare_device(args.api)
     try:
+        prepare_device(args.api)
+        record_clock("emulator ready before first install")
         install(args.apk)
+        record_clock("first install completed")
         check_installed_package(args.output, args.version_code)
         profiles = ((320, 640, 0), (640, 320, 1), (360, 720, 0))
         for completed, (width, height, rotation) in enumerate(profiles):
             screen = phone_screen(args.output / f"{width}x{height}dp", width, height, rotation)
+            if completed == 0:
+                collect_diagnostics(args.output / "startup-diagnostics")
             review_on_phone(screen, completed)
         # Reserve the last portrait size for checking the native chooser after a cold start.
         adb("shell", "am", "force-stop", PACKAGE)
@@ -539,9 +619,17 @@ def main():
         adb("shell", "wm", "density", "reset")
         adb("shell", "wm", "fixed-to-user-rotation", "default")
         check_upgrade(args.previous_apk, args.apk, args.version_code, args.output)
-    finally:
         capture_screenshot(args.output / "android.png")
         check_failures(args.output)
+    except Exception:
+        record_clock("verification failure")
+        collect_diagnostics(args.output / "failure-diagnostics", failure=True)
+        try:
+            capture_screenshot(args.output / "android.png")
+            check_failures(args.output)
+        except (OSError, subprocess.SubprocessError, RuntimeError) as error:
+            print(error)
+        raise
 
 
 if __name__ == "__main__":
