@@ -81,6 +81,42 @@ def capture_screenshot(path):
     path.write_bytes(screenshot)
 
 
+def backup_chooser_has_read_grant(activities):
+    resumed = re.search(r"(?m)^ *(?:topResumedActivity|ResumedActivity)\s*[:=]\s*ActivityRecord\{(\S+) u\d+ ([^\s}]+)", activities)
+    if not resumed:
+        return False
+    record_id, component = resumed.groups()
+    host, _, name = component.partition("/")
+    if component != "android/com.android.internal.app.ChooserActivity" and not (
+        host in {"com.android.intentresolver", "com.google.android.intentresolver"}
+        and name.rsplit(".", 1)[-1] in {"ChooserActivity", "ChooserActivityLauncher"}
+    ):
+        return False
+
+    # Read the history entry for the resumed activity, excluding adjacent activities.
+    history = re.search(
+        rf"(?m)^( *)\* Hist +#\d+: ActivityRecord\{{{re.escape(record_id)} u\d+ {re.escape(component)}(?=[ }}])[^\n]*\n"
+        r"((?:\1 +[^\n]+\n)*)",
+        activities,
+    )
+    if not history:
+        return False
+    details = history[2]
+    intent = re.search(
+        rf"(?m)^ *Intent \{{ act=android\.intent\.action\.CHOOSER\b[^\n]* flg=0x([0-9a-f]+) cmp={re.escape(component)}(?=[ }}])",
+        details,
+    )
+    return bool(
+        intent and int(intent[1], 16) & 1
+        and re.search(rf"\blaunchedFromPackage={re.escape(PACKAGE)}(?=\s|$)", details)
+        and re.search(
+            rf"(?m)^ *readUriPermissions=\{{[^\n]* content://{re.escape(PACKAGE)}\.fileprovider/"
+            r"shared_backups/hanyu-progress-\d{4}-\d{2}-\d{2}\.json(?=[ }])",
+            details,
+        )
+    )
+
+
 class AppScreen:
     def __init__(self, output):
         self.output = output
@@ -147,18 +183,14 @@ class AppScreen:
         while time.monotonic() < deadline:
             activities = adb("shell", "dumpsys", "activity", "-a", "activities")
             (self.output / "backup-activities.txt").write_text(activities + "\n")
-            if re.search(r"ResumedActivity\s*[:=][^\n]*ChooserActivity\b", activities, re.IGNORECASE):
-                chooser = next((line.strip() for line in activities.splitlines()
-                                if "act=android.intent.action.CHOOSER" in line and "ChooserActivity" in line), "")
-                flags = re.search(r"\bflg=0x([0-9a-f]+)\b", chooser)
-                if flags and int(flags[1], 16) & 1 and ("U(content)" in chooser or "U:content://" in chooser):
-                    print("Android opened the share chooser with a readable backup content URI.")
-                    capture_screenshot(self.output / "backup-chooser.png")
-                    adb("shell", "input", "keyevent", "KEYCODE_BACK")
-                    self.find(backup_button, scroll=True)
-                    self.cards_complete(1)
-                    print("Dismissed the chooser and returned to the app with saved progress.")
-                    return
+            if backup_chooser_has_read_grant(activities):
+                print("Android opened the share chooser with a read grant for the backup JSON.")
+                capture_screenshot(self.output / "backup-chooser.png")
+                adb("shell", "input", "keyevent", "KEYCODE_BACK")
+                self.find(backup_button, scroll=True)
+                self.cards_complete(1)
+                print("Dismissed the chooser and returned to the app with saved progress.")
+                return
             time.sleep(1)
         raise RuntimeError("Backup share chooser did not open with a file attachment. See backup-activities.txt.")
 
