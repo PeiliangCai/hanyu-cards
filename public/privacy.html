@@ -3,24 +3,30 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>HanYu Cards Privacy Policy</title>
+  <title>HanYu Cards Privacy Notice</title>
   <style>
     body { max-width: 760px; margin: 0 auto; padding: 32px 18px; color: #163033; font-family: system-ui, sans-serif; line-height: 1.6; background: #f6f8f4; }
-    h1, h2 { line-height: 1.15; }
-    a { color: #167c80; }
+    h1, h2 { line-height: 1.2; } a { color: #167c80; }
   </style>
 </head>
 <body>
-  <h1>HanYu Cards Privacy Policy</h1>
-  <p>Effective date: June 16, 2026</p>
-  <p>HanYu Cards is an offline-first Mandarin learning app. Vocabulary progress, review history, daily goal, and settings are stored locally on your device.</p>
-  <h2>Data We Collect</h2>
-  <p>The app does not require an account and does not sell personal data. When you send a message to the AI tutor, the app sends your message, the current vocabulary word, due word count, mastered count, and recent mistake words to the configured assistant API so it can answer.</p>
-  <h2>Data Storage</h2>
-  <p>Learning progress is stored in device browser storage or the native app webview storage. You can reset local progress in Settings.</p>
-  <h2>Third Parties</h2>
-  <p>If the AI tutor is enabled, messages are processed by the configured AI provider through the app backend. Review your deployment provider's terms before publishing.</p>
-  <h2>Contact</h2>
-  <p>For production release, replace this section with the publisher support email and legal address.</p>
+  <a href="/settings">Back to Settings</a>
+  <h1>HanYu Cards Privacy Notice</h1>
+  <p><strong>Deployment draft, updated September 21, 2026.</strong> The publisher must identify its operator, support contact, hosting region, AI provider, and retention practices before public release. This draft describes the software in this repository.</p>
+  <h2>Local learning</h2>
+  <p>No account is required. Vocabulary progress, review dates, daily goals, completed missions, and preferences are saved in browser or app storage on your device. This version has one learner profile per browser and no cloud synchronization, advertising, or analytics SDK. Hosting services receive the network requests needed to load the app.</p>
+  <h2>Optional online tutoring</h2>
+  <p>Online AI is off by default. Opening the tutor or using local study notes does not send chat data. If you enable online AI and send a message, the app sends your message, up to six recent online conversation messages, the selected word and mission, HSK level, due and mastered counts, and up to five recent mistake words to the configured app server. In live AI mode, the server passes the tutoring fields to its AI provider; demo mode produces a local rule-based reply on the server.</p>
+  <p>Do not include names, contact details, or other sensitive information in tutor messages. AI responses may be incorrect. Existing lessons are designed for adult HSK learners; parents should supervise any shared use. This version does not provide a child account or verified parental controls.</p>
+  <h2>Choices and deletion</h2>
+  <p>Turn off Online AI tutoring in Settings or in the tutor to stop future chat requests. Disabling the floating tutor also turns online AI off. Already transmitted data cannot be recalled by this switch. Chat messages stay in page memory, are not included in backups, and can be removed with Clear conversation or by closing the page.</p>
+  <p>Download or restore learning history in Settings. Restore replaces current progress only after you review and confirm it. Backup files are unencrypted and remain wherever you save them. Reset Local Progress removes saved learning history while keeping your daily goal and preferences. Clear this site's browser data to remove preferences and offline caches as well; delete exported files separately.</p>
+  <h2>Servers and retention</h2>
+  <p>The bundled API does not write chat history to a database and requests provider response storage to be disabled. That setting does not establish zero retention by the provider. Provider and hosting retention depend on the publisher's service configuration. The bundled web server logs IP address, URL path, response status and size; its access logs omit request bodies and query strings. API error logs contain an error code, status, and request identifier, not chat content. Operators must set and disclose retention and access controls for these logs.</p>
+  <h2>Pronunciation</h2>
+  <p>Pronunciation uses your device's speech synthesis. Voice availability and whether the chosen voice needs a network connection depend on your operating system. This app does not request microphone access.</p>
+  <h2>Publisher and support</h2>
+  <p>Publisher identity, privacy contact, support contact, service region, and applicable retention periods have not yet been configured for this development version. These details must be supplied in the published notice before launch.</p>
+  <p><a href="/third-party-notices.txt">Third-party acknowledgements</a></p>
 </body>
 </html>

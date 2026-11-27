@@ -675,9 +675,10 @@ select {
     right: 0;
     bottom: 72px;
     display: grid;
-    grid-template-rows: auto auto minmax(180px, 1fr) auto;
+    grid-template-rows: auto auto auto auto minmax(60px, 1fr) auto auto;
     width: min(390px, calc(100vw - 32px));
-    max-height: min(620px, calc(100vh - 150px));
+    max-height: min(740px, calc(100dvh - 210px));
+    height: min(740px, calc(100dvh - 210px));
     overflow: hidden;
     border: 1px solid rgba(22, 48, 51, 0.14);
     border-radius: 12px;
@@ -741,6 +742,7 @@ select {
     width: fit-content;
     max-width: 88%;
     white-space: pre-wrap;
+    overflow-wrap: anywhere;
     border-radius: 12px;
     padding: 10px 12px;
     line-height: 1.45;
@@ -854,4 +856,54 @@ select {
         right: -4px;
         width: calc(100vw - 24px);
     }
+}
+
+:focus-visible {
+    outline: 3px solid #a8422d;
+    outline-offset: 3px;
+}
+
+.skip-link {
+    position: fixed;
+    top: -80px;
+    left: 16px;
+    z-index: 100;
+    padding: 12px;
+    background: #fff;
+    color: #163033;
+}
+
+.skip-link:focus { top: 12px; }
+
+.storage-warning {
+    padding: 16px;
+    margin-bottom: 16px;
+    border: 1px solid #a8422d;
+    border-radius: 8px;
+    background: #fff4ef;
+    color: #763020;
+}
+
+.storage-warning a { display: block; color: inherit; }
+
+.assistant__consent {
+    padding: 10px 14px;
+    font-size: .82rem;
+    max-height: 180px;
+    overflow-y: auto;
+    line-height: 1.5;
+}
+
+.assistant__consent summary { cursor: pointer; font-weight: 700; }
+.assistant__consent label { display: block; }
+.assistant__consent a { color: #167c80; }
+.assistant__status { padding: 4px 14px; font-size: .78rem; color: #4e6466; }
+.assistant__clear { padding: 8px; background: #e9f4ef; color: #163033; }
+
+@media (max-height: 650px) {
+    .assistant__panel { position: fixed; inset: 8px 8px auto auto; height: calc(100dvh - 16px); max-height: none; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after { scroll-behavior: auto !important; animation: none !important; transition: none !important; }
 }

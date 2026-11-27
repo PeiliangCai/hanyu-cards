@@ -12,11 +12,13 @@ import {
 import { useAssistantStore } from '@/stores/assistant'
 import { useContentStore } from '@/stores/content'
 import { useProgressStore } from '@/stores/progress'
+import { useSettingsStore } from '@/stores/settings'
 import { speakMandarin } from '@/utils/learning'
 
 const assistant = useAssistantStore()
 const content = useContentStore()
 const progress = useProgressStore()
+const settings = useSettingsStore()
 const response = ref('')
 const submitted = ref(false)
 
@@ -35,7 +37,7 @@ const taskFeedback = computed(() => {
     if (!task)
         return ''
     if (matchedKeywords.value.length === task.expectedKeywords.length)
-        return 'Mission complete. You included every target expression.'
+        return 'Mission complete. You included every target expression. This keyword check does not assess grammar or fluency.'
     if (matchedKeywords.value.length)
         return `Good start. Add: ${task.expectedKeywords.filter((keyword) => !matchedKeywords.value.includes(keyword)).join(' · ')}`
 
@@ -47,6 +49,8 @@ watch(() => activeScenario.value?.id, () => {
     submitted.value = false
 })
 
+watch(response, () => { submitted.value = false })
+
 function chooseScenario(scenarioId: string) {
     content.setActiveScenario(scenarioId)
     document.querySelector('.scenario-detail')?.scrollIntoView({ behavior: 'smooth', block: 'start' })
@@ -57,7 +61,8 @@ async function submitTask() {
         return
 
     submitted.value = true
-    await progress.completeScenario(activeScenario.value.id)
+    if (matchedKeywords.value.length === activeScenario.value.task.expectedKeywords.length)
+        await progress.completeScenario(activeScenario.value.id)
 }
 
 function openTutor() {
@@ -116,6 +121,7 @@ function openTutor() {
                         <span>{{ activeScenario.title }}</span>
                     </div>
                     <button
+                        v-if="settings.assistantEnabled"
                         @click="openTutor"
                         type="button"
                         class="secondary-action">
@@ -158,6 +164,7 @@ function openTutor() {
                                 <strong>{{ word.simplified }}</strong>
                                 <button
                                     @click="speakMandarin(word.simplified)"
+                                    :disabled="!settings.ttsEnabled"
                                     type="button"
                                     :aria-label="`Play ${word.simplified}`">
                                     <VolumeHighOutline></VolumeHighOutline>
@@ -190,6 +197,7 @@ function openTutor() {
                             </div>
                             <button
                                 @click="speakMandarin(line.zh)"
+                                :disabled="!settings.ttsEnabled"
                                 type="button"
                                 :aria-label="`Play line ${index + 1}`">
                                 <VolumeHighOutline></VolumeHighOutline>

@@ -1,5 +1,9 @@
 <script setup lang="ts">
-import { computed, onMounted } from 'vue'
+import {
+    computed,
+    onMounted,
+    onUnmounted,
+} from 'vue'
 import {
     BarChartOutline,
     BookOutline,
@@ -10,8 +14,16 @@ import {
 } from '@vicons/ionicons5'
 import AIAssistant from '@/components/AIAssistant.vue'
 import { useProgressStore } from '@/stores/progress'
+import { useSettingsStore } from '@/stores/settings'
 
 const progress = useProgressStore()
+const settings = useSettingsStore()
+function syncSettings(event: StorageEvent) {
+    if (event.key === null || event.key === 'hanyu-settings-v1')
+        settings.syncFromStorage()
+}
+onMounted(() => window.addEventListener('storage', syncSettings))
+onUnmounted(() => window.removeEventListener('storage', syncSettings))
 
 const navItems = [
     { to: '/study', label: 'Study', icon: SchoolOutline },
@@ -32,6 +44,9 @@ onMounted(async () => {
 
 <template>
     <div class="app-shell">
+        <a
+            class="skip-link"
+            href="#main-content">Skip to learning content</a>
         <header class="topbar">
             <div>
                 <p class="eyebrow">HSK 1-3 Mandarin</p>
@@ -55,8 +70,20 @@ onMounted(async () => {
             </div>
         </header>
 
-        <main class="app-main">
-            <router-view></router-view>
+        <main
+            id="main-content"
+            class="app-main">
+            <div
+                v-if="progress.storageError"
+                class="storage-warning"
+                role="alert">
+                {{ progress.storageError }}
+                <RouterLink to="/settings">Open backup and recovery settings</RouterLink>
+            </div>
+            <router-view v-if="progress.hydrated"></router-view>
+            <p
+                v-else
+                role="status">Loading your saved progress…</p>
         </main>
 
         <nav

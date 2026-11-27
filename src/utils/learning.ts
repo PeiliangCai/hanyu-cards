@@ -27,7 +27,7 @@ export const reviewIntervalText: Record<ReviewGrade, string> = {
 }
 
 export function todayKey(date = new Date()) {
-    return date.toISOString().slice(0, 10)
+    return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`
 }
 
 export function normalizeSearch(value: string) {
@@ -107,10 +107,27 @@ export function wordMatchesSearch(word: HskWord, term: string) {
 }
 
 export function chooseQuizOptions(current: HskWord, pool: HskWord[]) {
-    const shuffled = pool
-        .filter((word) => word.id !== current.id)
-        .sort(() => Math.random() - 0.5)
-        .slice(0, 3)
+    const meaningKey = (word: HskWord) => word.english.trim().replace(/\s+/g, ' ').toLowerCase()
+    const seen = new Set([meaningKey(current)])
+    const candidates = pool.filter((word) => {
+        const meaning = meaningKey(word)
+        if (word.id === current.id || !meaning || seen.has(meaning))
+            return false
+        seen.add(meaning)
 
-    return [...shuffled, current].sort(() => Math.random() - 0.5)
+        return true
+    })
+
+    function shuffle(words: HskWord[]) {
+        for (let index = words.length - 1; index > 0; index--) {
+            const swapIndex = Math.floor(Math.random() * (index + 1))
+            const previous = words[index]
+            words[index] = words[swapIndex]
+            words[swapIndex] = previous
+        }
+
+        return words
+    }
+
+    return shuffle([...shuffle(candidates).slice(0, 3), current])
 }

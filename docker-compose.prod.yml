@@ -1,11 +1,9 @@
-version: '3.8'
+# Optional limits for small hosts. The base Compose file is already production mode.
+# docker compose -f docker-compose.yml -f docker-compose.prod.yml up --build -d --wait
 services:
-  languages_learner_web:
-    image: languages_learner_web_prod
-    container_name: languages_learner_web_prod
-    build:
-      dockerfile: Dockerfile.prod
-    ports:
-      - "8080:8080"
-    environment:
-      - NODE_ENV=production
+  web:
+    mem_limit: 128m
+    cpus: "0.50"
+  api:
+    mem_limit: 256m
+    cpus: "1.00"

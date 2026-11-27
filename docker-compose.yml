@@ -1,5 +1,63 @@
-version: "3.8"
+name: hanyu-cards
+
 services:
-  languages_learner_web:
+  web:
     build:
       context: .
+      dockerfile: Dockerfile.prod
+      target: web
+    ports:
+      - "${WEB_BIND_ADDRESS:-127.0.0.1}:${WEB_PORT:-8080}:8080"
+    depends_on:
+      api:
+        condition: service_healthy
+    restart: unless-stopped
+    read_only: true
+    tmpfs:
+      - /tmp:size=32m,mode=1777
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    pids_limit: 100
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile.prod
+      target: api
+    # The API is reachable only on the Compose network, through the web proxy.
+    environment:
+      NODE_ENV: production
+      HOST: 0.0.0.0
+      PORT: "8787"
+      TRUST_PROXY: "1"
+      ALLOWED_ORIGINS: ${ALLOWED_ORIGINS:-http://localhost:8080,http://127.0.0.1:8080}
+      ASSISTANT_MODE: ${ASSISTANT_MODE:-mock}
+      AI_MODEL: ${AI_MODEL:-gpt-5.4-mini}
+      AI_TIMEOUT_MS: ${AI_TIMEOUT_MS:-20000}
+      ASSISTANT_RATE_LIMIT_PER_MINUTE: ${ASSISTANT_RATE_LIMIT_PER_MINUTE:-20}
+      ASSISTANT_GLOBAL_RATE_LIMIT_PER_MINUTE: ${ASSISTANT_GLOBAL_RATE_LIMIT_PER_MINUTE:-60}
+      ASSISTANT_DAILY_REQUEST_LIMIT: ${ASSISTANT_DAILY_REQUEST_LIMIT:-1000}
+      ASSISTANT_MAX_CONCURRENT: ${ASSISTANT_MAX_CONCURRENT:-4}
+      ASSISTANT_MAX_RATE_LIMIT_KEYS: ${ASSISTANT_MAX_RATE_LIMIT_KEYS:-10000}
+      # Never use a VITE_ variable, build argument or committed file for secrets.
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+      ASSISTANT_ACCESS_MODE: ${ASSISTANT_ACCESS_MODE:-}
+      ASSISTANT_PROXY_SECRET: ${ASSISTANT_PROXY_SECRET:-}
+    init: true
+    restart: unless-stopped
+    read_only: true
+    tmpfs:
+      - /tmp:size=16m,mode=1777
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    pids_limit: 100
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"

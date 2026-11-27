@@ -29,6 +29,9 @@ export default defineConfig({
             disable: process.env.NODE_ENV === 'test',
             injectRegister: null,
             registerType: 'autoUpdate',
+            workbox: {
+                navigateFallbackDenylist: [/^\/api(?:\/|$)/, /^\/healthz$/],
+            },
             includeAssets: ['favicon.ico', 'apple-touch-icon.png', 'privacy.html'],
             manifest: {
                 name: 'HanYu Cards',
@@ -55,6 +58,7 @@ export default defineConfig({
             ignoreSourceErrors: false,
             tsconfig: 'tsconfig.json',
         },
+        include: ['tests/**/*.test.{js,ts}', 'src/**/*.test.{js,ts}'],
         includeSource: ['src/**/*.{js,ts}', 'tests/**/*.test.{js,ts}'],
     },
     define: {
@@ -63,6 +67,9 @@ export default defineConfig({
     server: {
         host: true,
         port: 3000,
+        proxy: {
+            '/api': { target: 'http://127.0.0.1:8787', changeOrigin: false },
+        },
         watch: {
             usePolling: true,
         },

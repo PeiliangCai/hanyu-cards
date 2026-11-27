@@ -16,6 +16,7 @@ const progress = useProgressStore()
 const settings = useSettingsStore()
 const reveal = ref(false)
 const cursor = ref(0)
+const savingReview = ref(false)
 
 const studyQueue = computed(() => {
     const words = content.filteredWords
@@ -39,12 +40,19 @@ watch(() => content.selectedLevel, () => {
 })
 
 async function review(grade: ReviewGrade) {
-    if (!activeWord.value)
+    if (!activeWord.value || savingReview.value)
         return
 
-    await progress.reviewWord(activeWord.value, grade)
+    const reviewedWord = activeWord.value
+    savingReview.value = true
     reveal.value = false
-    cursor.value = studyQueue.value.length <= 1 ? 0 : Math.min(cursor.value, studyQueue.value.length - 1)
+    try {
+        await progress.reviewWord(reviewedWord, grade)
+        cursor.value = studyQueue.value.length <= 1 ? 0 : Math.min(cursor.value, studyQueue.value.length - 1)
+    }
+    finally {
+        savingReview.value = false
+    }
 }
 </script>
 

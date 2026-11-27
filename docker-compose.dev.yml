@@ -1,18 +1,24 @@
-version: '3.8'
+# Standalone development configuration; do not merge with the production file.
+# docker compose -f docker-compose.dev.yml up --build
+name: hanyu-cards-dev
 services:
-  languages_learner_web:
-    image: languages_learner_web_dev
-    container_name: languages_learner_web_dev
+  app:
     build:
+      context: .
       dockerfile: Dockerfile.dev
     ports:
-      - "3000:3000"
+      - "127.0.0.1:3000:3000"
+      - "127.0.0.1:8787:8787"
     volumes:
       - .:/app
       - node_modules:/app/node_modules
-    command: ["npm", "run", "dev"]
     environment:
-      - NODE_ENV=development
+      NODE_ENV: development
+      HOST: 0.0.0.0
+      VITE_ASSISTANT_API_URL: http://localhost:8787
+      ASSISTANT_MODE: mock
+      ALLOWED_ORIGINS: http://localhost:3000
+    init: true
 
 volumes:
   node_modules:

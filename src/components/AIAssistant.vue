@@ -1,5 +1,10 @@
 <script setup lang="ts">
-import { computed, ref } from 'vue'
+import {
+    computed,
+    nextTick,
+    ref,
+    watch,
+} from 'vue'
 import {
     ChatbubbleEllipsesOutline,
     CloseOutline,
@@ -17,6 +22,23 @@ const content = useContentStore()
 const progress = useProgressStore()
 const settings = useSettingsStore()
 const draft = ref('')
+const messageList = ref<HTMLElement | null>(null)
+const composer = ref<HTMLInputElement | null>(null)
+
+watch(() => [settings.onlineAssistantEnabled, settings.assistantEnabled], () => {
+    if (!settings.onlineAssistantEnabled || !settings.assistantEnabled)
+        assistant.cancel()
+})
+watch(() => assistant.messages.length, async () => {
+    await nextTick()
+    messageList.value?.scrollTo({ top: messageList.value.scrollHeight, behavior: 'smooth' })
+})
+watch(() => assistant.isOpen, async (open) => {
+    if (open) {
+        await nextTick()
+        composer.value?.focus()
+    }
+})
 
 const recentMistakes = computed(() => {
     const ids = Object.values(progress.records)
@@ -69,12 +91,13 @@ function quickAsk(message: string) {
 
         <section
             v-if="assistant.isOpen"
+            @keydown.esc="assistant.isOpen = false"
             class="assistant__panel"
             aria-label="AI tutor">
             <header class="assistant__header">
                 <div>
                     <strong>AI Tutor</strong>
-                    <span>Mandarin coach</span>
+                    <span>{{ settings.onlineAssistantEnabled ? 'Online tutor enabled' : 'Local study notes' }}</span>
                 </div>
                 <button
                     @click="assistant.toggle"
@@ -84,25 +107,54 @@ function quickAsk(message: string) {
                 </button>
             </header>
 
+            <details class="assistant__consent">
+                <summary>Online AI &amp; privacy</summary>
+                <p>Online AI shares your message, up to six recent online chat messages, current word or mission, level, review counts, and recent mistake words with this app's server and its AI provider. Avoid personal or sensitive details. Parents should supervise use.</p>
+                <label>
+                    <input
+                        @change="settings.setOnlineAssistantEnabled(($event.target as HTMLInputElement).checked)"
+                        :checked="settings.onlineAssistantEnabled"
+                        type="checkbox" />
+                    Enable online AI for this device
+                </label>
+                <a
+                    href="/privacy.html"
+                    target="_blank"
+                    rel="noopener">Privacy details</a>
+            </details>
+
             <div class="assistant__quick">
                 <button
                     @click="quickAsk('Explain the current word with one example.')"
-                    type="button">Explain</button>
+                    type="button"
+                    :disabled="assistant.isLoading">Explain</button>
                 <button
                     @click="quickAsk('Create a mnemonic for the current word.')"
-                    type="button">Mnemonic</button>
+                    type="button"
+                    :disabled="assistant.isLoading">Mnemonic</button>
                 <button
                     @click="quickAsk('Quiz me on my recent mistakes.')"
-                    type="button">Quiz me</button>
+                    type="button"
+                    :disabled="assistant.isLoading">Quiz me</button>
                 <button
                     @click="quickAsk('Role-play the current real-life scenario with me. Start with one short line in Chinese and wait for my reply.')"
-                    type="button">Role-play</button>
+                    type="button"
+                    :disabled="assistant.isLoading">Role-play</button>
                 <button
                     @click="quickAsk('Make a focused 10-minute study plan from my level, due words, and recent mistakes.')"
-                    type="button">My plan</button>
+                    type="button"
+                    :disabled="assistant.isLoading">My plan</button>
             </div>
 
-            <div class="assistant__messages">
+            <div
+                class="assistant__status"
+                role="status">{{ assistant.status }}</div>
+            <div
+                ref="messageList"
+                class="assistant__messages"
+                role="log"
+                aria-label="Tutor conversation"
+                aria-live="polite">
                 <div
                     v-for="message in assistant.messages"
                     :key="message.id"
@@ -121,9 +173,12 @@ function quickAsk(message: string) {
                 class="assistant__form">
                 <ChatbubbleEllipsesOutline></ChatbubbleEllipsesOutline>
                 <input
+                    ref="composer"
                     v-model="draft"
                     type="text"
                     autocomplete="off"
+                    maxlength="2000"
+                    aria-label="Message to tutor"
                     placeholder="Ask about pronunciation, meaning, or grammar" />
                 <button
                     type="submit"
@@ -132,6 +187,10 @@ function quickAsk(message: string) {
                     <SendOutline></SendOutline>
                 </button>
             </form>
+            <button
+                @click="assistant.clearMessages"
+                class="assistant__clear"
+                type="button">Clear conversation</button>
         </section>
     </div>
 </template>

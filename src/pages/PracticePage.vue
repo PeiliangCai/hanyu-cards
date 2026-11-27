@@ -6,6 +6,7 @@ import {
 } from 'vue'
 import { useContentStore } from '@/stores/content'
 import { useProgressStore } from '@/stores/progress'
+import { useSettingsStore } from '@/stores/settings'
 import {
     chooseQuizOptions,
     levelOptions,
@@ -14,11 +15,12 @@ import {
 
 const content = useContentStore()
 const progress = useProgressStore()
+const settings = useSettingsStore()
 const currentIndex = ref(0)
 const selectedId = ref('')
 const answered = ref(false)
 
-const pool = computed(() => content.filteredWords.slice(0, 400))
+const pool = computed(() => content.filteredWords)
 const current = computed(() => pool.value[currentIndex.value % Math.max(1, pool.value.length)])
 const options = computed(() => current.value ? chooseQuizOptions(current.value, pool.value) : [])
 const isCorrect = computed(() => selectedId.value === current.value?.id)
@@ -28,6 +30,12 @@ watch(current, (word) => {
         content.setActiveWord(word.id)
 }, { immediate: true })
 
+watch(pool, () => {
+    currentIndex.value = 0
+    selectedId.value = ''
+    answered.value = false
+})
+
 function select(wordId: string) {
     if (answered.value)
         return
@@ -35,7 +43,7 @@ function select(wordId: string) {
 }
 
 async function submit() {
-    if (!selectedId.value || !current.value)
+    if (answered.value || !selectedId.value || !current.value)
         return
 
     answered.value = true
@@ -73,6 +81,7 @@ function next() {
             class="quiz-panel">
             <button
                 @click="speakMandarin(current.simplified)"
+                :disabled="!settings.ttsEnabled"
                 class="quiz-panel__audio"
                 type="button">
                 Hear word

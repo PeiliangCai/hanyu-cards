@@ -1,5 +1,13 @@
 # HanYu Cards
 
+面向个人与家长辅助使用的汉语学习产品。本轮已补充商用需求及工程加固；正式发布仍需内容校审、运营资料和目标环境验收。
+
+- [商用产品需求与验收标准（中文）](docs/product-requirements.zh-CN.md)
+- [正式发布门槛与待办](docs/commercial-release-checklist.md)
+- [本次验证报告](docs/validation-report.md)
+- [生产部署手册](docs/Docker.md)
+- [词库质量审核](docs/content-audit.md)
+
 Offline-first Mandarin Chinese learning app for adult HSK learners. The app was rebuilt from the MIT-licensed `languages-learner/web` Vue 3 codebase and now focuses on Chinese vocabulary, smart review, and an optional AI tutor.
 
 ## Features
@@ -28,10 +36,10 @@ For the 2026 mid-term review, the recommended evidence set is the built web/PWA 
 
 ## Development
 
-Use Node.js 20 or newer.
+Use Node.js 22 LTS (`nvm use`; Node 24 is also supported).
 
 ```bash
-npm install
+npm ci
 npm run dev
 ```
 
@@ -48,7 +56,20 @@ For frontend and API together:
 npm run dev:all
 ```
 
-Set `OPENAI_API_KEY` and `AI_MOCK=false` in `.env` for production AI responses. The frontend uses `VITE_ASSISTANT_API_URL` and never stores provider keys.
+The default UI uses local study notes and makes no chat request until the learner enables online AI. The development server proxies `/api` to `127.0.0.1:8787`; change the proxy target if you change `PORT`.
+
+`ASSISTANT_MODE=mock` returns clearly labelled demonstration replies. `disabled` rejects chat requests. Live `openai` mode requires a server-side authenticating gateway, access quotas, `OPENAI_API_KEY` and a private gateway credential; see [deployment instructions](docs/Docker.md). Setting a provider key alone does not enable paid requests. The frontend uses an optional public `VITE_ASSISTANT_API_URL`; secrets must never use a `VITE_` variable.
+
+### Validation
+
+```bash
+npm run check
+npm audit
+```
+
+`check` runs type checking, lint, frontend regression tests, Node API integration tests and a production build. API tests use injected test responses and do not spend provider credits. CI additionally builds the production containers and runs `python3 docker/smoke.py`.
+
+Settings supports versioned JSON backup and restore, including an explicit replacement preview. Storage failures remain visible while local study continues in memory. Backups exclude chat messages and AI consent; browser storage remains the only source of saved learning history until you export it. There is no account or automatic cloud sync. Concurrent tabs are protected when Web Locks is available; use one tab at a time otherwise.
 
 ## Build
 
@@ -64,4 +85,4 @@ Android and iOS release details are in [docs/release-checklist.md](docs/release-
 - No Baicizhan branding, assets, or proprietary word data are used.
 - Base app attribution and HSK dataset attribution are listed in [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).
 - The default release has no account, no ads, and no tracking.
-- The privacy policy draft is available at `public/privacy.html` and must be hosted under the publisher domain before store submission.
+- The privacy notice at `public/privacy.html` is a deployment draft. Fill in the actual publisher, support, provider and retention details before release. Review [commercial release gates](docs/commercial-release-checklist.md).
