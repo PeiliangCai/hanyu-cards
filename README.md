@@ -61,6 +61,8 @@ The default UI uses local study notes and makes no chat request until the learne
 
 `ASSISTANT_MODE=mock` returns clearly labelled demonstration replies. `disabled` rejects chat requests. Live `openai` mode requires a server-side authenticating gateway, access quotas, `OPENAI_API_KEY` and a private gateway credential; see [deployment instructions](docs/Docker.md). Setting a provider key alone does not enable paid requests. The frontend uses an optional public `VITE_ASSISTANT_API_URL`; secrets must never use a `VITE_` variable.
 
+For AGICTO, select `ASSISTANT_MODE=agicto` and fill in `AGICTO_API_KEY` in the server environment. The default model is `gpt-6-luna`. This mode uses the same authenticating gateway and quotas. See the [local AGICTO test](docs/Docker.md#agicto-本机验证).
+
 ### Validation
 
 ```bash

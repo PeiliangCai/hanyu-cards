@@ -9,20 +9,22 @@ function integer(env, name, fallback, min, max) {
 
 export function readConfig(env = process.env) {
     const mode = env.ASSISTANT_MODE ?? (env.AI_MOCK === 'true' ? 'mock' : 'disabled')
-    if (!['disabled', 'mock', 'openai'].includes(mode))
-        throw new Error('ASSISTANT_MODE must be disabled, mock, or openai')
+    if (!['disabled', 'mock', 'openai', 'agicto'].includes(mode))
+        throw new Error('ASSISTANT_MODE must be disabled, mock, openai, or agicto')
+    const live = mode === 'openai' || mode === 'agicto'
     if (env.AI_MOCK !== undefined && !['true', 'false'].includes(env.AI_MOCK))
         throw new Error('AI_MOCK must be true or false')
-    if (env.AI_MOCK === 'true' && mode === 'openai')
-        throw new Error('Remove AI_MOCK=true before enabling openai mode')
+    if (env.AI_MOCK === 'true' && live)
+        throw new Error(`Remove AI_MOCK=true before enabling ${mode} mode`)
 
-    const apiKey = env.OPENAI_API_KEY?.trim()
+    const apiKeyName = mode === 'agicto' ? 'AGICTO_API_KEY' : 'OPENAI_API_KEY'
+    const apiKey = live ? env[apiKeyName]?.trim() : undefined
     const proxySecret = env.ASSISTANT_PROXY_SECRET
-    if (mode === 'openai') {
+    if (live) {
         if (!apiKey)
-            throw new Error('OPENAI_API_KEY is required in openai mode')
+            throw new Error(`${apiKeyName} is required in ${mode} mode`)
         if (env.ASSISTANT_ACCESS_MODE !== 'trusted-proxy')
-            throw new Error('OpenAI mode requires ASSISTANT_ACCESS_MODE=trusted-proxy and an authenticating gateway')
+            throw new Error(`${mode === 'agicto' ? 'AGICTO' : 'OpenAI'} mode requires ASSISTANT_ACCESS_MODE=trusted-proxy and an authenticating gateway`)
         if (typeof proxySecret !== 'string' || proxySecret.length < 32 || proxySecret.length > 256 || !/^[\x21-\x7e]+$/.test(proxySecret))
             throw new Error('ASSISTANT_PROXY_SECRET must contain 32–256 non-whitespace ASCII characters; keep it only on the API and authenticating gateway')
     }
@@ -43,7 +45,9 @@ export function readConfig(env = process.env) {
         apiKey,
         proxySecret,
         allowedOrigins,
-        model: env.AI_MODEL?.trim() || 'gpt-5.4-mini',
+        model: mode === 'agicto'
+            ? env.AGICTO_MODEL?.trim() || 'gpt-6-luna'
+            : env.AI_MODEL?.trim() || 'gpt-5.4-mini',
         host: env.HOST || '127.0.0.1',
         port: integer(env, 'PORT', 8787, 1, 65535),
         trustProxy: integer(env, 'TRUST_PROXY', 0, 0, 5),

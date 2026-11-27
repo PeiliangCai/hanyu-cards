@@ -30,7 +30,7 @@ npm run mobile:doctor
 
 `VITE_ASSISTANT_API_URL` 可留空，使用离线学习和本地助教提示。需要在线对话时，填写已部署的公开 HTTPS **网关**地址。原生包会拒绝 localhost、带凭据或非 HTTPS 的在线地址。
 
-`OPENAI_API_KEY`、`ASSISTANT_PROXY_SECRET`、其他供应商密钥只放在服务端，不能写入移动配置或任何 `VITE_` 变量。真实 AI 请求必须由可信网关在服务端验证调用者、施加配额并注入代理凭据，不能把网关凭据打包进 App。具体见 [部署手册](Docker.md)。允许的来源需与 `https://localhost`（Android）、`capacitor://localhost`（iOS）及实际 Web 域名匹配；来源白名单不能替代认证。
+`OPENAI_API_KEY`、`AGICTO_API_KEY` 和 `ASSISTANT_PROXY_SECRET` 只放在服务端，不能写入移动配置或任何 `VITE_` 变量。真实 AI 请求必须由可信网关在服务端验证调用者、施加配额并注入代理凭据，不能把网关凭据打包进 App。具体见 [部署手册](Docker.md)。允许的来源需与 `https://localhost`（Android）、`capacitor://localhost`（iOS）及实际 Web 域名匹配；来源白名单不能替代认证。
 
 ## Android
 

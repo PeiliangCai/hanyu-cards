@@ -7,16 +7,27 @@ import { createApp } from '../../server/app.mjs'
 import { readConfig } from '../../server/config.mjs'
 import { createRateLimiter } from '../../server/rate-limit.mjs'
 
+const localFetch = globalThis.fetch
 const secret = 'test-gateway-secret-never-sent-to-browser'
+const proxyHeaders = { 'X-Assistant-Proxy-Token': secret }
 const liveEnv = {
     ASSISTANT_MODE: 'openai',
     OPENAI_API_KEY: 'test-only-no-network-key',
     ASSISTANT_ACCESS_MODE: 'trusted-proxy',
     ASSISTANT_PROXY_SECRET: secret,
 }
+const agictoEnv = {
+    ...liveEnv,
+    ASSISTANT_MODE: 'agicto',
+    AGICTO_API_KEY: 'test-agicto-key',
+    AI_MODEL: 'openai-model-only',
+}
 const word = { simplified: '你好', pinyin: 'nǐ hǎo', english: 'hello' }
 const valid = { message: 'Explain this word.', context: { activeWord: word, learnerLevel: 1, recentMistakes: [] }, history: [] }
 const complete = { status: 'completed', output_text: '你好 means hello.' }
+const chatCompletion = {
+    choices: [{ finish_reason: 'stop', message: { role: 'assistant', content: '  你好 means hello.  ' } }],
+}
 
 async function serve(t, { env = { ASSISTANT_MODE: 'mock' }, create = async () => complete, ...options } = {}) {
     const logs = []
@@ -34,7 +45,7 @@ async function serve(t, { env = { ASSISTANT_MODE: 'mock' }, create = async () =>
         await new Promise((resolve, reject) => server.close(error => error ? reject(error) : resolve()))
     })
     const url = `http://127.0.0.1:${server.address().port}`
-    const send = (body = valid, headers = {}) => fetch(`${url}/api/assistant/chat`, {
+    const send = (body = valid, headers = {}) => localFetch(`${url}/api/assistant/chat`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', ...headers },
         body: JSON.stringify(body),
@@ -53,10 +64,14 @@ async function errorCode(response, status, code) {
 }
 
 test('safe defaults never call a paid provider, even with an API key', async t => {
-    const { send, url, calls } = await serve(t, { env: { OPENAI_API_KEY: 'present-but-disabled', NODE_ENV: 'production' } })
+    const providerFetch = t.mock.method(globalThis, 'fetch', async () => Response.json(chatCompletion))
+    const { send, url, calls } = await serve(t, {
+        env: { OPENAI_API_KEY: 'present-but-disabled', AGICTO_API_KEY: 'also-disabled', NODE_ENV: 'production' },
+    })
     await errorCode(await send(), 503, 'ASSISTANT_DISABLED')
     assert.equal(calls.length, 0)
-    const health = await fetch(`${url}/health`)
+    assert.equal(providerFetch.mock.callCount(), 0)
+    const health = await localFetch(`${url}/health`)
     assert.deepEqual(await health.json(), { ok: true, service: 'hanyu-assistant', mode: 'disabled' })
     assert.equal(health.headers.get('x-powered-by'), null)
     assert.equal(health.headers.get('cache-control'), 'no-store')
@@ -75,8 +90,22 @@ test('invalid production configuration fails before listening, without including
     assert.equal(readConfig({ AI_MOCK: 'true' }).mode, 'mock')
 })
 
+test('live providers require their own credentials and select only their own model settings', () => {
+    assert.throws(() => readConfig({ ...agictoEnv, AGICTO_API_KEY: '  ' }), /AGICTO_API_KEY is required/)
+    assert.throws(() => readConfig({ ...agictoEnv, ASSISTANT_MODE: 'openai', OPENAI_API_KEY: '' }), /OPENAI_API_KEY is required/)
+    assert.throws(() => readConfig({ ...agictoEnv, ASSISTANT_ACCESS_MODE: '' }), /trusted-proxy/)
+    assert.throws(() => readConfig({ ...agictoEnv, ASSISTANT_PROXY_SECRET: 'short' }), /32–256/)
+    assert.throws(() => readConfig({ ...agictoEnv, AI_MOCK: 'true' }), /Remove AI_MOCK/)
+    assert.equal(readConfig(agictoEnv).model, 'gpt-6-luna')
+    assert.equal(readConfig({ ...agictoEnv, AGICTO_MODEL: '  other-chat-model  ' }).model, 'other-chat-model')
+    assert.equal(readConfig({ ...agictoEnv, AGICTO_MODEL: '  ' }).model, 'gpt-6-luna')
+    assert.equal(readConfig({ ...liveEnv, AGICTO_MODEL: 'agicto-model-only' }).model, 'gpt-5.4-mini')
+    assert.equal(readConfig({ ...liveEnv, AI_MODEL: '  custom-openai-model  ' }).model, 'custom-openai-model')
+})
+
 test('explicit mock is clearly marked and supports a valid word and scenario', async t => {
-    const { send, calls } = await serve(t)
+    const providerFetch = t.mock.method(globalThis, 'fetch', async () => Response.json(chatCompletion))
+    const { send, calls } = await serve(t, { env: { ASSISTANT_MODE: 'mock', AGICTO_API_KEY: 'present-but-mock' } })
     const response = await send()
     assert.equal(response.status, 200)
     const result = await response.json()
@@ -86,6 +115,7 @@ test('explicit mock is clearly marked and supports a valid word and scenario', a
     const scenario = await send({ message: 'role-play', context: { activeScenario: { title: 'Cafe', mission: 'Order tea', dialogue: [] } } })
     assert.match((await scenario.json()).reply, /Order tea/)
     assert.equal(calls.length, 0)
+    assert.equal(providerFetch.mock.callCount(), 0)
 })
 
 test('untrusted Origin fails with JSON and cannot reach the provider', async t => {
@@ -168,6 +198,140 @@ test('online requests minimize context, disable persistence/retries, and return 
     assert.ok(options.signal instanceof AbortSignal)
     assert.doesNotMatch(request.input[0].content, /do-not-forward|device-specific-id/)
     assert.deepEqual(JSON.parse(request.input[0].content).context.activeWord, word)
+})
+
+function setOpenAICustomHeaders(t, value) {
+    const previous = process.env.OPENAI_CUSTOM_HEADERS
+    process.env.OPENAI_CUSTOM_HEADERS = value
+    t.after(() => {
+        if (previous === undefined)
+            delete process.env.OPENAI_CUSTOM_HEADERS
+        else
+            process.env.OPENAI_CUSTOM_HEADERS = previous
+    })
+}
+
+test('AGICTO sends a bounded Chat Completions request using only its own credential', async t => {
+    setOpenAICustomHeaders(t, 'Authorization: Bearer ambient-openai-key\nX-OpenAI-Private: openai-only')
+    let time = 1000
+    const providerFetch = t.mock.method(globalThis, 'fetch', async () => Response.json(chatCompletion))
+    const { send, url } = await serve(t, {
+        env: { ...agictoEnv, ASSISTANT_GLOBAL_RATE_LIMIT_PER_MINUTE: '1', ASSISTANT_DAILY_REQUEST_LIMIT: '1' },
+        now: () => time,
+    })
+    assert.deepEqual(await (await localFetch(`${url}/health`)).json(), {
+        ok: true, service: 'hanyu-assistant', mode: 'agicto',
+    })
+    await errorCode(await send(valid, { Origin: 'https://untrusted.example', ...proxyHeaders }), 403, 'ORIGIN_NOT_ALLOWED')
+    await errorCode(await send(valid, { Origin: 'http://localhost:3000' }), 401, 'AUTHENTICATION_REQUIRED')
+    await errorCode(await send({ message: '' }, proxyHeaders), 400, 'INVALID_REQUEST')
+    assert.equal(providerFetch.mock.callCount(), 0)
+
+    const response = await send({
+        ...valid,
+        context: { ...valid.context, activeWord: { ...word, extra: 'do-not-forward' } },
+        history: [{ role: 'user', content: 'Earlier question', id: 'device-specific-id' }],
+    }, proxyHeaders)
+    assert.equal(response.status, 200)
+    assert.deepEqual(await response.json(), {
+        mode: 'online', reply: complete.output_text, requestId: response.headers.get('x-request-id'),
+    })
+    await errorCode(await send(valid, proxyHeaders), 429, 'GLOBAL_RATE_LIMITED')
+    time += 60_000
+    await errorCode(await send(valid, proxyHeaders), 429, 'DAILY_LIMIT_REACHED')
+    assert.equal(providerFetch.mock.callCount(), 1)
+
+    const [endpoint, request] = providerFetch.mock.calls[0].arguments
+    assert.equal(endpoint, 'https://api.agicto.cn/v1/chat/completions')
+    assert.equal(request.method, 'POST')
+    assert.equal(request.redirect, 'error')
+    assert.ok(request.signal instanceof AbortSignal)
+    assert.deepEqual(Object.fromEntries(new Headers(request.headers)), {
+        authorization: 'Bearer test-agicto-key',
+        'content-type': 'application/json',
+    })
+    const body = JSON.parse(request.body)
+    assert.equal(body.model, 'gpt-6-luna')
+    assert.equal(body.store, false)
+    assert.equal(body.max_completion_tokens, 700)
+    assert.deepEqual(body.messages.map(message => message.role), ['developer', 'user'])
+    assert.match(body.messages[0].content, /Mandarin Chinese tutor/)
+    assert.deepEqual(JSON.parse(body.messages[1].content), {
+        ...valid, history: [{ role: 'user', content: 'Earlier question' }],
+    })
+})
+
+test('OpenAI still uses the SDK Responses transport and its own key', async t => {
+    setOpenAICustomHeaders(t, 'X-Test-OpenAI-SDK: local-fixture')
+    const providerFetch = t.mock.method(globalThis, 'fetch', async () => Response.json({
+        object: 'response',
+        status: 'completed',
+        output: [{ type: 'message', content: [{ type: 'output_text', text: complete.output_text }] }],
+    }))
+    const { send } = await serve(t, {
+        env: { ...liveEnv, AGICTO_API_KEY: agictoEnv.AGICTO_API_KEY, AGICTO_MODEL: 'agicto-only' },
+        client: undefined,
+    })
+    const response = await send(valid, proxyHeaders)
+    assert.equal(response.status, 200)
+    assert.equal((await response.json()).reply, complete.output_text)
+    assert.equal(providerFetch.mock.callCount(), 1)
+    const [endpoint, request] = providerFetch.mock.calls[0].arguments
+    assert.match(new URL(endpoint).pathname, /\/responses$/)
+    assert.equal(new Headers(request.headers).get('authorization'), `Bearer ${liveEnv.OPENAI_API_KEY}`)
+    const body = JSON.parse(request.body)
+    assert.equal(body.model, 'gpt-5.4-mini')
+    assert.equal(body.max_output_tokens, 700)
+    assert.equal(body.store, false)
+    assert.deepEqual(body.input, [{ role: 'user', content: JSON.stringify(valid) }])
+})
+
+test('AGICTO errors, incomplete replies, and invalid content never reach the client', async t => {
+    const sensitiveMessage = 'private-provider-credential-and-learner-data'
+    const providerError = { error: { message: sensitiveMessage } }
+    const providerReplies = [
+        [Response.json(providerError, { status: 503 }), 'PROVIDER_UNAVAILABLE'],
+        [Response.json(providerError), 'PROVIDER_INVALID_RESPONSE'],
+        [Response.json({ choices: [] }), 'PROVIDER_INVALID_RESPONSE'],
+        [Response.json({ choices: [{ finish_reason: 'length', message: { content: sensitiveMessage } }] }), 'PROVIDER_INVALID_RESPONSE'],
+        [Response.json({ choices: [{ finish_reason: 'stop', message: { content: '   ' } }] }), 'PROVIDER_INVALID_RESPONSE'],
+        [Response.json({ choices: [{ finish_reason: 'stop', message: { content: '字'.repeat(8001) } }] }), 'PROVIDER_INVALID_RESPONSE'],
+    ]
+    let nextReply
+    const providerFetch = t.mock.method(globalThis, 'fetch', async () => nextReply)
+    const { send, logs } = await serve(t, { env: agictoEnv })
+    for (const [reply, code] of providerReplies) {
+        nextReply = reply
+        const response = await send(valid, proxyHeaders)
+        assert.doesNotMatch(await response.clone().text(), /private-provider-credential-and-learner-data/)
+        await errorCode(response, 502, code)
+    }
+    assert.equal(providerFetch.mock.callCount(), providerReplies.length)
+    assert.doesNotMatch(JSON.stringify(logs), /private-provider-credential-and-learner-data|test-agicto-key|Explain/)
+})
+
+test('AGICTO shares the concurrency guard and aborts timed-out upstream work', async t => {
+    const started = Promise.withResolvers()
+    let pending = true
+    const providerFetch = t.mock.method(globalThis, 'fetch', async (_url, { signal }) => {
+        if (!pending)
+            return Response.json(chatCompletion)
+        started.resolve(signal)
+        return new Promise((_resolve, reject) => {
+            signal.addEventListener('abort', () => reject(signal.reason), { once: true })
+        })
+    })
+    const { send } = await serve(t, {
+        env: { ...agictoEnv, AI_TIMEOUT_MS: '500', ASSISTANT_MAX_CONCURRENT: '1' },
+    })
+    const first = send(valid, proxyHeaders)
+    const signal = await started.promise
+    await errorCode(await send(valid, proxyHeaders), 503, 'ASSISTANT_BUSY')
+    await errorCode(await first, 504, 'PROVIDER_TIMEOUT')
+    assert.equal(signal.aborted, true)
+    pending = false
+    assert.equal((await send(valid, proxyHeaders)).status, 200)
+    assert.equal(providerFetch.mock.callCount(), 2)
 })
 
 test('provider failures never expose provider errors or silently return mock content', async t => {

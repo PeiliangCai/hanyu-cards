@@ -64,22 +64,61 @@ Nginx 会覆盖浏览器传入的 `X-Forwarded-For`，API 使用 `TRUST_PROXY=1`
 
 ## 接入真实 AI
 
-仅设置 `OPENAI_API_KEY` 不会开启付费调用。后端的 `openai` 模式要求以下运行时配置：
+启用付费调用需要显式选择 `agicto` 或 `openai`，并在 API 运行环境和认证网关上配置相同的服务间凭证。两个模式共用以下设置。
 
 ```dotenv
-ASSISTANT_MODE=openai
 ASSISTANT_ACCESS_MODE=trusted-proxy
 ASSISTANT_PROXY_SECRET=<32至256个非空白ASCII字符的随机服务间密钥>
-OPENAI_API_KEY=<仅服务端保存的供应商密钥>
-AI_MODEL=<已获授权且确认可用的模型名称>
 AI_TIMEOUT_MS=20000
 ```
 
-上线前必须另外接入认证网关：验证用户身份、订阅权限和用户配额，清除客户端伪造的 `X-Assistant-Proxy-Token`，然后在认证通过的内部请求中注入服务间凭证。当前 Nginx 会主动清除该头；直接把默认 Compose 切换为 `openai` 后，公开请求会被 API 拒绝。这是需要接入网关的明确边界，不应通过在公开 Nginx 中写死凭证来绕开。
+通过服务器专用的环境变量选择 AGICTO。`AGICTO_MODEL` 默认使用 `gpt-6-luna`，可填该账户支持的其他聊天模型。API 将请求发送到 `https://api.agicto.cn/v1/chat/completions`。[AGICTO 快速开始](https://docs.agicto.com/quickstart) · [gpt-6-luna 模型页](https://agicto.com/model/gpt-6-luna)
+
+```dotenv
+ASSISTANT_MODE=agicto
+AGICTO_API_KEY=
+AGICTO_MODEL=gpt-6-luna
+```
+
+通过 OpenAI Responses API 调用时，选择 `openai` 并填入 OpenAI 密钥。`AI_MODEL` 默认使用 `gpt-5.4-mini`。
+
+```dotenv
+ASSISTANT_MODE=openai
+OPENAI_API_KEY=
+AI_MODEL=gpt-5.4-mini
+```
+
+上线前必须另外接入认证网关。网关负责验证用户身份、订阅权限和用户配额，清除客户端伪造的 `X-Assistant-Proxy-Token`，然后在认证通过的内部请求中注入服务间凭证。默认 Compose 的 Nginx 会清除该请求头，API 会拒绝经由该入口发出的付费请求，直至部署接入认证网关。
 
 供应商密钥和网关凭证只在 API/认证网关运行时注入，禁止放入 `VITE_` 变量、Docker build args、镜像或 Git。Compose 的环境变量注入适合基础部署；具备 Docker 管理权限的人员仍可查看运行环境。正式环境应由受控密钥管理系统注入和轮换，并限制运维权限。
 
 当前进程内限流和日请求上限会在重启时归零，不是持久化计费账本。扩容前需要共享限流和持久化用户额度，并在供应商账户配置预算。该部署不会备份浏览器中的学习记录：学习数据仍在用户设备，应提供用户导出，并在计划跨设备服务时单独实现账户数据存储和备份恢复。
+
+### AGICTO 本机验证
+
+在仓库根目录的 `.env` 中配置 `ASSISTANT_MODE=agicto`、`ASSISTANT_ACCESS_MODE=trusted-proxy` 和 `ASSISTANT_PROXY_SECRET`，然后填入 `AGICTO_API_KEY`。若文件已包含模式和服务间凭证，只需填写 `AGICTO_API_KEY`。使用默认的本机监听地址 `127.0.0.1`，运行 `npm run dev:api`。
+
+另开一个终端。以下命令读取 `.env` 中的服务间凭证并向本机 API 提交一次测试请求，会使用 AGICTO 额度。成功时返回 `mode: online` 和导师回复。
+
+```sh
+node --env-file=.env --input-type=module <<'NODE'
+const url = new URL('http://127.0.0.1:8787/api/assistant/chat')
+url.port = process.env.PORT || url.port
+const response = await fetch(url, {
+    method: 'POST',
+    headers: {
+        'Content-Type': 'application/json',
+        'X-Assistant-Proxy-Token': process.env.ASSISTANT_PROXY_SECRET,
+    },
+    body: JSON.stringify({ message: 'How do I say hello in Mandarin?' }),
+    redirect: 'error',
+})
+const body = await response.json()
+console.log(response.status, body)
+const online = body.mode === 'online' && typeof body.reply === 'string' && body.reply.trim()
+process.exitCode = response.ok && online ? 0 : 1
+NODE
+```
 
 ## 构建与缓存
 
