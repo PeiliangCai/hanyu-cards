@@ -58,12 +58,19 @@ const dueCount = computed(() => {
 
 async function send() {
     const message = draft.value
+    const { activeScenario } = content
     draft.value = ''
     await assistant.send({
         message,
         context: {
             activeWord: content.activeWord,
-            activeScenario: content.activeScenario,
+            activeScenario: activeScenario && {
+                title: activeScenario.title,
+                chineseTitle: activeScenario.chineseTitle,
+                mission: activeScenario.mission,
+                dialogue: activeScenario.dialogue,
+                task: { expectedKeywords: activeScenario.task.expectedKeywords },
+            },
             learnerLevel: content.selectedLevel,
             dueCount: dueCount.value,
             masteredCount: progress.masteredCount,
@@ -116,7 +123,7 @@ function quickAsk(message: string) {
                 class="assistant__body">
                 <details class="assistant__consent">
                     <summary>Online AI &amp; privacy</summary>
-                    <p>Online AI shares your message, up to six recent online chat messages, current word or mission, level, review counts, and recent mistake words with this app's server and its AI provider. Avoid personal or sensitive details. Parents should supervise use.</p>
+                    <p>Online AI shares your message, up to six recent online chat messages, current word or mission, level, review counts, and recent mistake words with this app's server and its AI provider. Online practice in Missions shares the topic, conversation, current mission and level. Avoid personal or sensitive details. Parents should supervise use.</p>
                     <label>
                         <input
                             @change="settings.setOnlineAssistantEnabled(($event.target as HTMLInputElement).checked)"

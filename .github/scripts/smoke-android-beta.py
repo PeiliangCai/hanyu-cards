@@ -22,8 +22,8 @@ HANZI = r"^[\u3400-\u9fff]+$"
 GRADES = (r"^Again\b", r"^Hard\b", r"^Good\b", r"^Easy\b")
 NAV_LABELS = ("Today", "Missions", "Practice", "Words", "Progress")
 WINDOW = "/sdcard/hanyu-beta-window.xml"
-# From SHA256SUMS attached to the published v1.0.0-beta.1 prerelease.
-PREVIOUS_APK_SHA256 = "6257152d9920c41cf4948c5841da74c3b39e1a2e703c3f5aba1e694851baaeeb"
+# From SHA256SUMS attached to the published v1.0.0-beta.2 prerelease.
+PREVIOUS_APK_SHA256 = "cda2c5a97634df055e401a99b6e0f0396e472b110f943699c4b1e274e5e98734"
 
 
 class Bounds(NamedTuple):
@@ -281,14 +281,15 @@ class AppScreen:
                     return True
         return False
 
-    def target(self, pattern, action=False):
+    def target(self, pattern, action=False, attribute=None):
+        fields = (attribute,) if attribute else ("text", "content-desc")
         for node in self.nodes:
             if action and (node.get("clickable") != "true" or node.get("enabled") != "true"):
                 continue
             bounds = node_bounds(node)
             if bounds.width <= 0 or bounds.height <= 0:
                 continue
-            for field in ("text", "content-desc"):
+            for field in fields:
                 name = " ".join(node.get(field, "").split())
                 if re.search(pattern, name):
                     return Target(name, bounds)
@@ -322,7 +323,8 @@ class AppScreen:
                 return f"the tutor obscures the center of {bounds}"
         return ""
 
-    def find_many(self, patterns, *, action=False, content=False, scroll=None, minimum=None, absent=()):
+    def find_many(self, patterns, *, action=False, content=False, scroll=None, minimum=None,
+                  absent=(), attribute=None, horizontal_scroll=None):
         deadline = time.monotonic() + 45
         issues = []
         while time.monotonic() < deadline:
@@ -330,7 +332,7 @@ class AppScreen:
                 time.sleep(0.5)
                 continue
             area = self.visible_area(content)
-            targets = [self.target(pattern, action) for pattern in patterns]
+            targets = [self.target(pattern, action, attribute) for pattern in patterns]
             issues = [
                 (pattern, self.visibility_issue(target, area, action, content, minimum))
                 for pattern, target in zip(patterns, targets)
@@ -340,7 +342,12 @@ class AppScreen:
                 for target in targets:
                     print(f"Visible {target.name}: {target.bounds}")
                 return targets
-            if scroll:
+            if horizontal_scroll:
+                y = horizontal_scroll.center[1]
+                inset = self.dp(14)
+                self.input("swipe", str(horizontal_scroll.right - inset), str(y),
+                           str(horizontal_scroll.left + inset), str(y), "650")
+            elif scroll:
                 scroll_area = self.visible_area(content=True)
                 require(scroll_area.height >= self.dp(80), f"The scrollable area is too short: {scroll_area}.")
                 x = scroll_area.center[0]
@@ -413,6 +420,41 @@ class AppScreen:
 
     def cards_complete(self, count, scroll=None):
         return self.find(rf"^Daily route: {count} of [1-9]\d* assigned cards completed\b", scroll=scroll)
+
+    def check_interest_practice(self, completed):
+        daily_route = self.cards_complete(completed).name
+        self.tap(r"^Missions$")
+        self.find(r"^Six missions\b", content=True, scroll="up")
+        missions = self.find(r"^Scenario missions$", content=True, scroll="down")
+        self.tap(r"\bBuy clothes\b", content=True, horizontal_scroll=missions.bounds)
+        self.find(r"^Explore an interest$", content=True, scroll="down")
+        self.tap(r"^Offline lesson\s*·\s*Bargaining\b", content=True, scroll="down")
+        self.find(r"^Bargaining\b", content=True, scroll="down")
+        self.find(r"^Culture in context$", content=True, scroll="down")
+        self.find(r"^At some street markets\b", content=True, scroll="down")
+        self.snapshot("interest-culture")
+        self.find(r"^Useful expressions$", content=True, scroll="down")
+        self.find(r"^能便宜一点吗？$", content=True, scroll="down")
+        self.find(r"^八十块可以吗？$", content=True, scroll="down")
+        self.snapshot("interest-expressions")
+        self.find(r"^Your turn$", content=True, scroll="down")
+        self.find(r"^这件外套一百块。$", content=True, scroll="down")
+        self.snapshot("interest-seller-turn")
+
+        self.tap(r"^offline-practice-reply$", attribute="resource-id", content=True, scroll="down")
+        # Use unaccented pinyin because adb input text only supports ASCII here.
+        self.input("text", "Bashi%skuai%skeyi%sma")
+        self.find(r"^Bashi kuai keyi ma$", action=True, minimum=1)
+        self.input("keyevent", "KEYCODE_BACK")
+        self.tap(r"^Show model reply$", content=True, scroll="down")
+        self.find(r"^Model reply$", content=True, scroll="down")
+        self.find(r"^能便宜一点吗？\s*八十块可以吗？$", content=True, scroll="down")
+        self.snapshot("interest-model-reply")
+
+        self.tap(r"^Today$")
+        require(self.cards_complete(completed).name == daily_route,
+                "The daily card route changed after offline interest practice.")
+        print("The offline bargaining lesson accepted a reply, showed the model, and preserved daily card progress.")
 
     def check_tutor(self, repetitions=1):
         for attempt in range(1, repetitions + 1):
@@ -559,30 +601,31 @@ def review_on_phone(screen, completed):
 
 
 def check_upgrade(old_apk, new_apk, new_version_code, output):
-    previous = AppScreen(output / "beta1-before-upgrade")
+    previous = AppScreen(output / "beta2-before-upgrade")
     with old_apk.open("rb") as file:
         digest = hashlib.file_digest(file, "sha256").hexdigest()
-    require(digest == PREVIOUS_APK_SHA256, "The upgrade baseline does not match the published beta.1 SHA-256.")
+    require(digest == PREVIOUS_APK_SHA256, "The upgrade baseline does not match the published beta.2 SHA-256.")
     (previous.output / "SHA256SUMS").write_text(f"{digest}  {old_apk.name}\n")
-    print(f"Published beta.1 APK SHA-256 verified: {digest}.")
+    print(f"Published beta.2 APK SHA-256 verified: {digest}.")
 
     install(old_apk)
-    check_installed_package(previous.output, 1)
+    check_installed_package(previous.output, 2)
     previous.launch_today()
     previous.cards_complete(0)
+    previous.tap(STUDY, content=True)
     previous.tap(REVEAL, content=True, scroll="down")
     previous.tap(GRADES[2], content=True, scroll="down")
     saved_progress = previous.cards_complete(1).name
     previous.snapshot("progress-before-upgrade")
 
     install(new_apk, replace=True)
-    upgraded = AppScreen(output / "beta2-after-upgrade")
+    upgraded = AppScreen(output / "beta3-after-upgrade")
     check_installed_package(upgraded.output, new_version_code)
     upgraded.launch_today()
     require(upgraded.cards_complete(1).name == saved_progress,
-            "The saved daily route changed during the in-place upgrade from beta.1.")
+            "The saved daily route changed during the in-place upgrade from beta.2.")
     upgraded.snapshot("progress-after-upgrade")
-    print("The published beta.1 review and daily target survived the in-place upgrade to beta.2.")
+    print("The published beta.2 review and daily target survived the in-place upgrade to beta.3.")
 
 
 def main():
@@ -606,6 +649,8 @@ def main():
             if completed == 0:
                 collect_diagnostics(args.output / "startup-diagnostics")
             review_on_phone(screen, completed)
+            if completed == 0:
+                screen.check_interest_practice(completed + 1)
         # Reserve the last portrait size for checking the native chooser after a cold start.
         adb("shell", "am", "force-stop", PACKAGE)
         screen.launch_today()

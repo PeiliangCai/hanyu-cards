@@ -17,6 +17,7 @@ Offline-first Mandarin Chinese learning app for individual HSK learners and pare
 - Fixed, resumable daily card routes with `Again`, `Hard`, `Good`, and `Easy` spaced-review scheduling, focused word study, and a mistake notebook.
 - Six progressive real-life missions for introductions, dining, shopping, transit, campus teamwork, and clinic visits.
 - Task-based lessons with learning goals, core expressions, bilingual dialogue, pronunciation, culture notes, and local target-phrase checks. These checks measure phrase coverage, not grammar or fluency.
+- Interest-led practice in each mission, with a saved offline lesson and optional AI-generated culture notes, useful expressions, and a conversation you can continue in Chinese.
 - Five adaptive practice modes (meaning, hanzi, pinyin, listening, context) with ten-question summaries and persistent skill statistics.
 - Paginated dictionary and progress views, daily goals, extra-word tracking, study time, accuracy and due counts.
 - Device speech synthesis for Mandarin pronunciation.
@@ -36,7 +37,7 @@ HanYu Cards is the working prototype for the university innovation project **AI�
 - **Content foundation:** 2,209 HSK 1–3 entries with simplified/traditional forms, pinyin, meanings, radicals, frequency and searchable tags.
 - **Personalization:** local spaced review, daily goal, accuracy, mastery and recent-mistake context drive the next recommended action.
 - **Scenario application:** six task-based missions cover first meetings, dining, shopping, metro travel, campus teamwork and clinic communication; each combines dialogue, pronunciation, culture notes and a written check.
-- **AI extension:** the tutor receives only the active learning context and supports explanation, review planning and role-play, with an offline fallback for prototype demonstrations.
+- **AI extension:** choose **Explore an interest** within a mission. In **Buy clothes**, start the saved **Bargaining · 砍价** lesson to see when bargaining is appropriate, make a counteroffer in Chinese, and compare your reply with a model. With **Online AI tutoring** enabled in Settings and a live assistant configured, type an interest to generate a lesson and continue the conversation. A demo server opens the saved offline example.
 
 For the 2026 mid-term review, the recommended evidence set is the built web/PWA prototype, automated unit/component tests, a small user-trial feedback log, and screenshots of the study, mission and progress flows. Suggested acceptance indicators are: a complete review-to-feedback loop, six playable missions, persistent offline progress, and a reproducible production build.
 
@@ -152,6 +153,7 @@ Check current store requirements at release time and update both guides when the
 | `src/utils/learning.ts` | 复习排期、搜索、语音和学习辅助逻辑。 |
 | `src/data/hskWords.json` | 2,209 条 HSK 1–3 词汇数据。 |
 | `src/data/scenarios.ts` | 六个任务型真实场景及其教学内容。 |
+| `src/data/missionPractices.ts` | 各场景可离线使用的兴趣练习。 |
 | `src/assets/app.scss` 与 `src/assets/scenarios.scss` | 当前界面的全局样式。 |
 | `src/router/index.ts` | 无需登录的当前路由表。 |
 | `server/index.mjs` | AI 助教后端，提供 `GET /health` 和 `POST /api/assistant/chat`。场景目标表达检查在本地运行。 |

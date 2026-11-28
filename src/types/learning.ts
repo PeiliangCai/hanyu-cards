@@ -87,6 +87,17 @@ export interface ScenarioTask {
     modelAnswer: WordExample
 }
 
+export interface SavedMissionPractice {
+    title: string
+    chineseTitle: string
+    searchTerms: string[]
+    cultureNote: string
+    expressions: WordExample[]
+    goal: string
+    openingLine: ScenarioDialogueLine
+    modelReply: WordExample
+}
+
 export interface LearningScenario {
     id: string
     level: HskLevel
@@ -101,15 +112,22 @@ export interface LearningScenario {
     cultureTitle: string
     cultureNote: string
     task: ScenarioTask
+    savedPractice: SavedMissionPractice
 }
 
 export interface AssistantContext {
     activeWord?: HskWord
-    activeScenario?: LearningScenario
+    activeScenario?: Pick<LearningScenario, 'title' | 'chineseTitle' | 'mission'>
+        & Partial<Pick<LearningScenario, 'setting' | 'dialogue'>>
+        & { task?: Pick<ScenarioTask, 'expectedKeywords'> }
     learnerLevel: HskLevel | 'all'
-    dueCount: number
-    masteredCount: number
-    recentMistakes: HskWord[]
+    dueCount?: number
+    masteredCount?: number
+    recentMistakes?: HskWord[]
+    missionPractice?: {
+        interest: string
+        turn: 'lesson' | 'reply'
+    }
 }
 
 export type ScenarioEvaluationSource = 'agicto' | 'local' | 'mock'

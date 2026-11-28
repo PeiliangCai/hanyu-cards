@@ -68,6 +68,7 @@ function scenario(value) {
         title: string(value.title, 'scenario title', 200),
         chineseTitle: string(value.chineseTitle, 'scenario Chinese title', 200, true),
         mission: string(value.mission, 'scenario mission', 1000),
+        setting: string(value.setting, 'scenario setting', 500, true),
         dialogue,
         task: { expectedKeywords },
     }
@@ -82,13 +83,25 @@ export function validateChat(body) {
     if (source.learnerLevel !== undefined && ![1, 2, 3, 'all'].includes(source.learnerLevel))
         invalid('context.learnerLevel')
     // Only the tutoring fields below leave this process. Full card metadata is ignored.
+    const activeScenario = source.activeScenario === undefined ? undefined : scenario(source.activeScenario)
+    let missionPractice
+    if (source.missionPractice !== undefined) {
+        const practice = object(source.missionPractice, 'context.missionPractice')
+        if (!activeScenario || ![1, 2, 3].includes(source.learnerLevel) || !['lesson', 'reply'].includes(practice.turn))
+            invalid('context.missionPractice (mission, HSK level, and turn required)')
+        missionPractice = {
+            interest: string(practice.interest, 'mission interest (maximum 120 characters)', 120),
+            turn: practice.turn,
+        }
+    }
     const context = {
         activeWord: source.activeWord === undefined ? undefined : word(source.activeWord, 'context.activeWord'),
-        activeScenario: source.activeScenario === undefined ? undefined : scenario(source.activeScenario),
+        activeScenario,
         learnerLevel: source.learnerLevel,
         dueCount: count(source.dueCount, 'context.dueCount'),
         masteredCount: count(source.masteredCount, 'context.masteredCount'),
         recentMistakes: source.recentMistakes === undefined ? [] : array(source.recentMistakes, 'context.recentMistakes', 5).map(item => word(item, 'recent mistake')),
+        missionPractice,
     }
     const history = body.history === undefined ? [] : array(body.history, 'history (maximum 6 messages)', 6).map(item => {
         object(item, 'history entry')

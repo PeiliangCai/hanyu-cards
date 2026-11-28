@@ -1,13 +1,16 @@
 import { defineStore } from 'pinia'
 import { markRaw } from 'vue'
 import type { AssistantContext } from '@/types/learning'
+import {
+    type AssistantChatMessage,
+    canUseOnlineAssistant,
+    recentAssistantHistory,
+    requestAssistantReply,
+} from '@/services/assistant/client'
 import { useSettingsStore } from '@/stores/settings'
-import { hasSecureNativeAssistantEndpoint } from '@/utils/native'
 
-interface AssistantMessage {
+interface AssistantMessage extends AssistantChatMessage {
     id: string
-    role: 'assistant' | 'user'
-    content: string
     online?: boolean
 }
 
@@ -25,17 +28,11 @@ function createMessage(role: AssistantMessage['role'], content: string, online =
     }
 }
 
-function endpoint() {
-    const base = import.meta.env.VITE_ASSISTANT_API_URL?.replace(/\/$/, '') ?? ''
-
-    return `${base}/api/assistant/chat`
-}
-
 function fallbackResponse(payload: SendAssistantPayload) {
     const word = payload.context.activeWord
     const scenario = payload.context.activeScenario
     if (scenario && payload.message.toLowerCase().includes('role-play')) {
-        const firstLine = scenario.dialogue[0]
+        const firstLine = scenario.dialogue?.[0]
 
         return [
             `Practice “${scenario.title}” with this saved example:`,
@@ -91,9 +88,8 @@ export const useAssistantStore = defineStore('assistant', {
             }
 
             const settings = useSettingsStore()
-            const online = settings.onlineAssistantEnabled && settings.assistantEnabled && hasSecureNativeAssistantEndpoint()
-            const history = this.messages.filter((message) => message.online).slice(-6)
-                .map(({ role, content }) => ({ role, content: content.slice(0, 2000) }))
+            const online = canUseOnlineAssistant(settings)
+            const history = recentAssistantHistory(this.messages.filter((message) => message.online))
             this.messages.push(createMessage('user', trimmed, online))
             const localReply = () => this.messages.push(createMessage('assistant', fallbackResponse(payload)))
             if (!online || (typeof navigator !== 'undefined' && !navigator.onLine)) {
@@ -109,49 +105,23 @@ export const useAssistantStore = defineStore('assistant', {
             this.isLoading = true
             const controller = markRaw(new AbortController())
             this.controller = controller
-            const timer = setTimeout(() => controller.abort(), 25_000)
             this.status = 'Contacting the online tutor…'
             try {
-                const response = await fetch(endpoint(), {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    credentials: 'same-origin',
-                    signal: controller.signal,
-                    body: JSON.stringify({ message: trimmed, context: payload.context, history }),
-                })
-                if (this.controller !== controller || controller.signal.aborted)
+                const result = await requestAssistantReply({ message: trimmed, context: payload.context, history }, settings, controller)
+                if (this.controller !== controller)
                     return
-                if (!response.ok) {
-                    this.status = response.status === 429
-                        ? 'Tutor request limit reached. Try again later · showing a saved study note.'
-                        : response.status === 401 || response.status === 403 || response.status === 503
-                            ? 'Online tutoring is unavailable for this session · showing a saved study note.'
-                            : 'The tutor could not respond · showing a saved study note.'
+                if (result.mode === 'unavailable') {
+                    this.status = `${result.reason} · showing a saved study note.`
                     localReply()
 
                     return
                 }
 
-                const data: unknown = await response.json()
-                if (this.controller !== controller || controller.signal.aborted)
-                    return
-                if (!data || typeof data !== 'object' || !('reply' in data) || typeof data.reply !== 'string' || !data.reply.trim() || data.reply.length > 12000)
-                    throw new Error('Invalid tutor response')
-
-                const isMock = 'mode' in data && data.mode === 'mock'
+                const isMock = result.mode === 'mock'
                 this.status = isMock ? 'Demo tutor · a saved response, not a generated AI answer.' : 'Online AI · check answers against your course material.'
-                this.messages.push(createMessage('assistant', data.reply.trim(), !isMock))
-            }
-            catch {
-                if (this.controller !== controller)
-                    return
-                this.status = controller.signal.aborted
-                    ? 'Tutor request stopped or timed out · showing a saved study note.'
-                    : 'Unable to reach the tutor · showing a saved study note.'
-                localReply()
+                this.messages.push(createMessage('assistant', result.reply, !isMock))
             }
             finally {
-                clearTimeout(timer)
                 if (this.controller === controller) {
                     this.controller = null
                     this.isLoading = false

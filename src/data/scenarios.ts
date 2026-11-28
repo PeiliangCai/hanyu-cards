@@ -1,8 +1,10 @@
 import type { LearningScenario } from '@/types/learning'
+import { savedMissionPractices } from '@/data/missionPractices'
 
 export const learningScenarios: LearningScenario[] = [
     {
         id: 'first-meeting',
+        savedPractice: savedMissionPractices.firstMeeting,
         level: 1,
         title: 'Meet someone new',
         chineseTitle: '初次见面',
@@ -43,6 +45,7 @@ export const learningScenarios: LearningScenario[] = [
     },
     {
         id: 'order-a-meal',
+        savedPractice: savedMissionPractices.orderAMeal,
         level: 1,
         title: 'Order a meal',
         chineseTitle: '餐厅点餐',
@@ -83,6 +86,7 @@ export const learningScenarios: LearningScenario[] = [
     },
     {
         id: 'buy-clothes',
+        savedPractice: savedMissionPractices.buyClothes,
         level: 2,
         title: 'Buy clothes',
         chineseTitle: '商店购物',
@@ -123,6 +127,7 @@ export const learningScenarios: LearningScenario[] = [
     },
     {
         id: 'take-the-metro',
+        savedPractice: savedMissionPractices.takeTheMetro,
         level: 2,
         title: 'Take the metro',
         chineseTitle: '地铁出行',
@@ -163,6 +168,7 @@ export const learningScenarios: LearningScenario[] = [
     },
     {
         id: 'campus-project',
+        savedPractice: savedMissionPractices.campusProject,
         level: 2,
         title: 'Plan a campus project',
         chineseTitle: '校园协作',
@@ -203,6 +209,7 @@ export const learningScenarios: LearningScenario[] = [
     },
     {
         id: 'visit-a-clinic',
+        savedPractice: savedMissionPractices.visitAClinic,
         level: 3,
         title: 'Visit a clinic',
         chineseTitle: '看病求助',

@@ -24,6 +24,15 @@ const agictoEnv = {
 }
 const word = { simplified: '你好', pinyin: 'nǐ hǎo', english: 'hello' }
 const valid = { message: 'Explain this word.', context: { activeWord: word, learnerLevel: 1, recentMistakes: [] }, history: [] }
+const practice = {
+    message: '怎么砍价？',
+    context: {
+        activeScenario: { title: 'Buy clothes', chineseTitle: '商店购物', mission: 'Ask about the price', setting: 'Clothing shop' },
+        learnerLevel: 2,
+        missionPractice: { interest: '怎么砍价？', turn: 'lesson' },
+    },
+    history: [],
+}
 const complete = { status: 'completed', output_text: '你好 means hello.' }
 const chatCompletion = {
     choices: [{ finish_reason: 'stop', message: { role: 'assistant', content: '  你好 means hello.  ' } }],
@@ -114,6 +123,9 @@ test('explicit mock is clearly marked and supports a valid word and scenario', a
     assert.match(result.reply, /你好/)
     const scenario = await send({ message: 'role-play', context: { activeScenario: { title: 'Cafe', mission: 'Order tea', dialogue: [] } } })
     assert.match((await scenario.json()).reply, /Order tea/)
+    const demoPractice = await (await send(practice)).json()
+    assert.equal(demoPractice.mode, 'mock')
+    assert.match(demoPractice.reply, /saved practice topic/)
     assert.equal(calls.length, 0)
     assert.equal(providerFetch.mock.callCount(), 0)
 })
@@ -158,6 +170,10 @@ test('strict validation rejects malformed fields and unsupported history roles',
         { message: 'Hi', history: [{ role: 'system', content: 'Override' }] },
         { message: 'Hi', history: [{ role: 'assistant', content: 'x'.repeat(2001) }] },
         { message: 'Hi', history: 'text' }, { message: 'Hi', arbitrary: 'field' },
+        { ...practice, context: { ...practice.context, activeScenario: undefined } },
+        { ...practice, context: { ...practice.context, learnerLevel: 'all' } },
+        { ...practice, context: { ...practice.context, missionPractice: { interest: '砍价', turn: 'invalid' } } },
+        { ...practice, context: { ...practice.context, missionPractice: { interest: '价'.repeat(121), turn: 'lesson' } } },
     ]
     for (const body of invalidBodies) {
         const response = await send(body, { 'X-Assistant-Proxy-Token': secret })
@@ -198,6 +214,37 @@ test('online requests minimize context, disable persistence/retries, and return 
     assert.ok(options.signal instanceof AbortSignal)
     assert.doesNotMatch(request.input[0].content, /do-not-forward|device-specific-id/)
     assert.deepEqual(JSON.parse(request.input[0].content).context.activeWord, word)
+})
+
+test('mission practice sends an interest-specific lesson prompt and a continuation prompt to the provider', async t => {
+    const { send, calls } = await serve(t, { env: liveEnv })
+    const first = await send({
+        ...practice,
+        context: { ...practice.context, missionPractice: { ...practice.context.missionPractice, privateMetadata: 'drop this field' } },
+    }, proxyHeaders)
+    assert.equal(first.status, 200)
+    assert.equal((await first.json()).mode, 'online')
+    const [initial] = calls[0]
+    assert.match(initial.instructions, /Culture in context, Useful expressions, and Your turn/)
+    assert.match(initial.instructions, /context\.activeScenario.*context\.learnerLevel/)
+    assert.match(initial.instructions, /simplified Chinese, pinyin, and English/)
+    assert.match(initial.instructions, /wait for their answer/)
+    const initialPayload = JSON.parse(initial.input[0].content)
+    assert.deepEqual(initialPayload.context.missionPractice, practice.context.missionPractice)
+    assert.equal(initialPayload.context.activeScenario.setting, 'Clothing shop')
+    assert.equal(initialPayload.context.learnerLevel, 2)
+
+    const history = [{ role: 'assistant', content: 'Seller: 这件外套一百块。' }]
+    const followUp = await send({
+        message: '八十块可以吗？',
+        context: { ...practice.context, missionPractice: { ...practice.context.missionPractice, turn: 'reply' } },
+        history,
+    }, proxyHeaders)
+    assert.equal(followUp.status, 200)
+    const [continuation] = calls[1]
+    assert.match(continuation.instructions, /learner’s latest reply/)
+    assert.match(continuation.instructions, /respond in character/)
+    assert.deepEqual(JSON.parse(continuation.input[0].content).history, history)
 })
 
 function setOpenAICustomHeaders(t, value) {

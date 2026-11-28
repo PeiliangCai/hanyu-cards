@@ -8,6 +8,8 @@ import { createRateLimiter } from './rate-limit.mjs'
 import { RequestError, validateChat } from './validation.mjs'
 
 function localTutorReply({ message, context }) {
+    if (context.missionPractice)
+        return 'Demo tutor. Open the saved practice topic in this mission for an offline example.'
     const word = context.activeWord
     const scenario = context.activeScenario
     if (scenario && message.toLowerCase().includes('role-play')) {

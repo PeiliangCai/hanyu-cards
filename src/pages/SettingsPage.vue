@@ -219,7 +219,7 @@ async function reset() {
             <label>
                 <span>
                     <strong>Online AI tutoring</strong>
-                    <small>Allow messages, the last six chat messages, the current word or mission, your level, review statistics, and recent mistakes to be sent to the configured server and AI provider. Turn off at any time. Local notes work offline.</small>
+                    <small>Allow messages, practice topics, up to six conversation messages, the current mission and your level to be sent to the configured server and AI provider. The floating tutor can also share your selected word, review statistics, and recent mistakes. Saved mission lessons work offline.</small>
                 </span>
                 <input
                     @change="settings.setOnlineAssistantEnabled(($event.target as HTMLInputElement).checked)"

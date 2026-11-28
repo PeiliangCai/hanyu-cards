@@ -11,6 +11,7 @@ import {
     watch,
 } from 'vue'
 import type { ScenarioEvaluation } from '@/types/learning'
+import MissionPractice from '@/components/MissionPractice.vue'
 import { useAssistantStore } from '@/stores/assistant'
 import { useContentStore } from '@/stores/content'
 import { useProgressStore } from '@/stores/progress'
@@ -170,6 +171,11 @@ function openTutor() {
                         class="scenario-hero__seal"
                         aria-hidden="true">用中文</i>
                 </header>
+
+                <MissionPractice
+                    :key="activeScenario.id"
+                    :scenario="activeScenario">
+                </MissionPractice>
 
                 <section class="lesson-section mission-objectives">
                     <div class="lesson-heading">
