@@ -28,6 +28,31 @@ beforeEach(() => {
 })
 
 describe('study review lifecycle', () => {
+    it('keeps the same study shortcut while the route loads and hides it once the route is complete', async () => {
+        const pinia = createPinia()
+        setActivePinia(pinia)
+        const progress = useProgressStore()
+        let finishHydration!: () => void
+        storage.get.mockImplementationOnce(() => new Promise((resolve) => {
+            finishHydration = () => resolve(null)
+        }))
+        const wrapper = mount(StudyPage, { global: { plugins: [pinia], stubs: { RouterLink: { template: '<a><slot /></a>' } } } })
+        const shortcut = wrapper.get<HTMLButtonElement>('button.study-hero__start').element
+        expect(shortcut.disabled).toBe(true)
+        expect(shortcut.getAttribute('aria-label')).toBe('Study today’s cards')
+
+        finishHydration()
+        await flushPromises()
+        expect(wrapper.get('button.study-hero__start').element).toBe(shortcut)
+        expect(shortcut.disabled).toBe(false)
+
+        const plan = progress.dailyPlans[dailyPlanKey(todayKey())]
+        plan.completedWordIds = [...plan.wordIds]
+        await flushPromises()
+        expect(wrapper.find('button.study-hero__start').exists()).toBe(false)
+        wrapper.unmount()
+    })
+
     it('records rapid repeated grades once and keeps the next answer hidden while saving', async () => {
         const pinia = createPinia()
         setActivePinia(pinia)

@@ -705,6 +705,12 @@ def main():
             screen = phone_screen(args.output / f"{width}x{height}dp", width, height, rotation)
             if completed == 0:
                 collect_diagnostics(args.output / "startup-diagnostics")
+                screen.find(STUDY, action=True, content=True)
+                screen.snapshot("today-first-launch")
+                adb("shell", "am", "force-stop", PACKAGE)
+                screen.launch_today()
+                record_clock("second 320 dp cold launch completed")
+                # The normal layout check now verifies the shortcut on this independent launch.
             review_on_phone(screen, completed)
             if completed == 0:
                 screen.check_interest_practice(completed + 1)

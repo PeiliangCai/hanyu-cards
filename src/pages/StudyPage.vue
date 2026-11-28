@@ -164,11 +164,12 @@ watch(focusedWordId, () => {
                 <p>Your queue is fixed for today, so every card brings you closer to a clear finish.</p>
                 <div class="study-hero__actions">
                     <button
-                        v-if="!preparing && displayedWord && !focusedReviewed"
+                        v-if="!focusedReviewed && (preparing || displayedWord)"
                         ref="studyShortcut"
                         @click="focusStudyCard"
                         class="primary-action study-hero__start"
                         type="button"
+                        :disabled="preparing"
                         :aria-label="studyShortcutLabel">
                         {{ studyShortcutLabel }}
                         <ArrowForwardOutline aria-hidden="true"></ArrowForwardOutline>
