@@ -446,6 +446,25 @@ class AppScreen:
     def cards_complete(self, count, scroll=None):
         return self.find(rf"^Daily route: {count} of [1-9]\d* assigned cards completed\b", scroll=scroll)
 
+    def wait_for_reply_input(self, reply, full_height):
+        deadline = time.monotonic() + 45
+        bounds = None
+        while time.monotonic() < deadline:
+            if self.read_window():
+                editors = [node for node in self.nodes if node.get("class") == "android.widget.EditText"
+                           and node.get("focused") == "true" and node.get("enabled") == "true"
+                           and node.get("text") == reply]
+                if len(editors) == 1:
+                    bounds = node_bounds(editors[0])
+                    # The keyboard can scroll the editor flush with the WebView's top.
+                    if (self.viewport.contains(bounds) and min(bounds.width, bounds.height) >= self.dp(24)
+                            and self.viewport.height <= full_height - self.dp(48)):
+                        print(f"Focused reply {reply!r}: {bounds} with keyboard in WebView {self.viewport}.")
+                        return
+            time.sleep(0.3)
+        raise RuntimeError(f"The focused editor did not show {reply!r} in a readable area with the keyboard open. "
+                           f"Editor: {bounds}, WebView: {self.viewport}. See {self.output.name}/window.xml.")
+
     def check_interest_practice(self, completed):
         daily_route = self.cards_complete(completed).name
         self.tap(r"^Missions$")
@@ -470,14 +489,23 @@ class AppScreen:
         self.find(r"^这件外套一百块。$", content=True, scroll="down")
         self.snapshot("interest-seller-turn")
 
-        self.tap(r"\bYour reply in Chinese\b", editor_id="offline-practice-reply", content=True, scroll="down")
+        editor = self.find(r"\bYour reply in Chinese\b", editor_id="offline-practice-reply",
+                           action=True, content=True, scroll="down")
+        full_height = self.viewport.height
+        self.press(editor)
         # Use unaccented pinyin because adb input text only supports ASCII here.
-        self.input("text", "Bashi%skuai%skeyi%sma")
-        self.find(r"^Bashi kuai keyi ma$", action=True, minimum=1)
+        reply = "Bashi kuai keyi ma"
+        self.input("text", reply.replace(" ", "%s"))
+        self.wait_for_reply_input(reply, full_height)
+        self.snapshot("interest-reply-keyboard")
         self.input("keyevent", "KEYCODE_BACK")
-        self.tap(r"^Show model reply$", content=True, scroll="down")
-        self.find(r"^Model reply$", content=True, scroll="down")
-        self.find(r"^能便宜一点吗？\s*八十块可以吗？$", content=True, scroll="down")
+        model_reply = r"能便宜一点吗？\s*八十块可以吗？"
+        show_model = self.find(r"^Show model reply$", action=True, content=True, scroll="down", absent=(model_reply,))
+        require(self.viewport.height >= full_height - self.dp(8),
+                "The Android keyboard did not dismiss before showing the model reply.")
+        self.press(show_model)
+        self.find(r"^Model reply\b", content=True, scroll="down")
+        self.find(model_reply, content=True, scroll="down")
         self.snapshot("interest-model-reply")
 
         self.tap(r"^Today$")
