@@ -281,19 +281,40 @@ class AppScreen:
                     return True
         return False
 
-    def target(self, pattern, action=False, attribute=None):
-        fields = (attribute,) if attribute else ("text", "content-desc")
+    def target(self, pattern, action=False):
         for node in self.nodes:
             if action and (node.get("clickable") != "true" or node.get("enabled") != "true"):
                 continue
             bounds = node_bounds(node)
             if bounds.width <= 0 or bounds.height <= 0:
                 continue
-            for field in fields:
+            for field in ("text", "content-desc"):
                 name = " ".join(node.get(field, "").split())
                 if re.search(pattern, name):
                     return Target(name, bounds)
         return None
+
+    def editor_target(self, label_pattern, editor_id):
+        label = self.target(label_pattern)
+        nearby_editors = []
+        for node in self.nodes:
+            if (node.get("class") != "android.widget.EditText"
+                    or node.get("clickable") != "true" or node.get("enabled") != "true"):
+                continue
+            bounds = node_bounds(node)
+            if bounds.width <= 0 or bounds.height <= 0:
+                continue
+            for field in ("text", "content-desc"):
+                name = " ".join(node.get(field, "").split())
+                if re.search(label_pattern, name):
+                    return Target(name, bounds)
+            if node.get("resource-id", "").rsplit("/", 1)[-1] == editor_id:
+                return Target(label.name if label else editor_id, bounds)
+            # Some WebViews expose the caption and editable field as separate nodes.
+            if (label and 0 <= bounds.top - label.bounds.bottom <= self.dp(24)
+                    and bounds.left <= label.bounds.center[0] < bounds.right):
+                nearby_editors.append(Target(label.name, bounds))
+        return nearby_editors[0] if len(nearby_editors) == 1 else None
 
     def visible_area(self, content=False):
         left, top, right, bottom = self.viewport
@@ -324,7 +345,7 @@ class AppScreen:
         return ""
 
     def find_many(self, patterns, *, action=False, content=False, scroll=None, minimum=None,
-                  absent=(), attribute=None, horizontal_scroll=None):
+                  absent=(), editor_id=None, horizontal_list=None):
         deadline = time.monotonic() + 45
         issues = []
         while time.monotonic() < deadline:
@@ -332,7 +353,8 @@ class AppScreen:
                 time.sleep(0.5)
                 continue
             area = self.visible_area(content)
-            targets = [self.target(pattern, action, attribute) for pattern in patterns]
+            targets = [self.editor_target(pattern, editor_id) if editor_id else self.target(pattern, action)
+                       for pattern in patterns]
             issues = [
                 (pattern, self.visibility_issue(target, area, action, content, minimum))
                 for pattern, target in zip(patterns, targets)
@@ -342,11 +364,14 @@ class AppScreen:
                 for target in targets:
                     print(f"Visible {target.name}: {target.bounds}")
                 return targets
-            if horizontal_scroll:
-                y = horizontal_scroll.center[1]
-                inset = self.dp(14)
-                self.input("swipe", str(horizontal_scroll.right - inset), str(y),
-                           str(horizontal_scroll.left + inset), str(y), "650")
+            if horizontal_list:
+                row = self.target(horizontal_list)
+                issue = self.visibility_issue(row, area, content=True)
+                require(not issue, f"The mission list left the visible area: {issue}.")
+                left, right = row.bounds.left, row.bounds.right
+                x, y = row.bounds.center
+                # Start within the carousel, away from Android's system Back gesture.
+                self.input("swipe", str((x + right) // 2), str(y), str((left + x) // 2), str(y), "650")
             elif scroll:
                 scroll_area = self.visible_area(content=True)
                 require(scroll_area.height >= self.dp(80), f"The scrollable area is too short: {scroll_area}.")
@@ -425,8 +450,12 @@ class AppScreen:
         daily_route = self.cards_complete(completed).name
         self.tap(r"^Missions$")
         self.find(r"^Six missions\b", content=True, scroll="up")
-        missions = self.find(r"^Scenario missions$", content=True, scroll="down")
-        self.tap(r"\bBuy clothes\b", content=True, horizontal_scroll=missions.bounds)
+        mission_list = r"^Scenario missions$"
+        self.find(mission_list, content=True, scroll="down")
+        self.snapshot("interest-missions")
+        shopping = self.find(r"\bBuy clothes\b", action=True, content=True, horizontal_list=mission_list)
+        self.snapshot("interest-shopping")
+        self.press(shopping)
         self.find(r"^Explore an interest$", content=True, scroll="down")
         self.tap(r"^Offline lesson\s*·\s*Bargaining\b", content=True, scroll="down")
         self.find(r"^Bargaining\b", content=True, scroll="down")
@@ -441,7 +470,7 @@ class AppScreen:
         self.find(r"^这件外套一百块。$", content=True, scroll="down")
         self.snapshot("interest-seller-turn")
 
-        self.tap(r"^offline-practice-reply$", attribute="resource-id", content=True, scroll="down")
+        self.tap(r"\bYour reply in Chinese\b", editor_id="offline-practice-reply", content=True, scroll="down")
         # Use unaccented pinyin because adb input text only supports ASCII here.
         self.input("text", "Bashi%skuai%skeyi%sma")
         self.find(r"^Bashi kuai keyi ma$", action=True, minimum=1)
